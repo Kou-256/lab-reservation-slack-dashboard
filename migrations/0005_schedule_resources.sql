@@ -1,0 +1,2 @@
+ALTER TABLE resources ADD COLUMN schedule_event INTEGER NOT NULL DEFAULT 0 CHECK(schedule_event IN (0,1));
+ALTER TABLE resources ADD COLUMN icon TEXT NOT NULL DEFAULT '';

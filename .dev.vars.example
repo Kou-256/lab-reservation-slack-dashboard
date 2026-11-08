@@ -1,0 +1,4 @@
+SLACK_BOT_TOKEN=local-placeholder-not-valid
+SLACK_SIGNING_SECRET=local-placeholder-not-valid
+ADMIN_TOKEN=local-placeholder-not-valid
+DASHBOARD_SECRET=local-placeholder-not-valid-at-least-32-chars

@@ -1,0 +1,27 @@
+display_information:
+  name: 研究室予約
+  description: ボタンで部屋・設備を予約します
+  background_color: "#245C4F"
+features:
+  app_home:
+    home_tab_enabled: true
+    messages_tab_enabled: false
+  bot_user:
+    display_name: lab-reservation
+    always_online: false
+oauth_config:
+  scopes:
+    bot:
+      - chat:write
+      - users:read
+settings:
+  event_subscriptions:
+    request_url: https://lab-slack-reservation.example-subdomain.workers.dev/slack/events
+    bot_events:
+      - app_home_opened
+  interactivity:
+    is_enabled: true
+    request_url: https://lab-slack-reservation.example-subdomain.workers.dev/slack/events
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  token_rotation_enabled: false

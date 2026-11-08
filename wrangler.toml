@@ -1,0 +1,25 @@
+name = "lab-reservation-template"
+main = "src/index.ts"
+compatibility_date = "2026-10-07"
+[triggers]
+crons = ["* * * * *"]
+[observability]
+enabled = true
+redact_query_string = true
+[assets]
+directory = "./dist/web"
+binding = "ASSETS"
+run_worker_first = true
+not_found_handling = "none"
+html_handling = "none"
+[[d1_databases]]
+binding = "DB"
+database_name = "your-reservation-db"
+database_id = "00000000-0000-4000-a000-000000000000"
+migrations_dir = "migrations"
+[vars]
+SLACK_TEAM_ID = "YOUR_TEAM_ID"
+SLACK_APP_ID = "YOUR_APP_ID"
+ADMIN_USER_IDS = ""
+OPERATIONS_CHANNEL_ID = ""
+SCHEDULE_CHANNEL_ID = ""

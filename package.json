@@ -1,0 +1,27 @@
+{
+  "name": "lab-slack-reservation",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "npm run dashboard:build && wrangler dev",
+    "deploy": "npm run dashboard:build && wrangler deploy",
+    "dashboard:build": "node scripts/build-dashboard.mjs",
+    "typecheck": "tsc --noEmit && tsc -p dashboard/tsconfig.json --noEmit",
+    "test": "vitest run",
+    "db:local": "wrangler d1 migrations apply DB --local",
+    "db:remote": "wrangler d1 migrations apply DB --remote"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "latest",
+    "@types/node": "^24.0.0",
+    "esbuild": "^0.28.2",
+    "miniflare": "latest",
+    "qrcode": "^1.5.4",
+    "typescript": "^5.9.3",
+    "vitest": "latest",
+    "wrangler": "latest"
+  },
+  "dependencies": {
+    "jsqr": "^1.4.0"
+  }
+}
