@@ -23,5 +23,6 @@
   },
   "dependencies": {
     "jsqr": "^1.4.0"
-  }
+  },
+  "license": "MIT"
 }

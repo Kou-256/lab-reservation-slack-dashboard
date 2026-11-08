@@ -45,4 +45,6 @@ Slack Appはslack-http-manifest.yamlを参考に作成し、URLを自分のWorke
 
 公開リポジトリ: https://github.com/Kou-256/lab-reservation-slack-dashboard
 
-ライセンスは未設定です。オープンソースライセンスによる利用・再配布の許諾は現時点では付与していません。
+## ライセンス
+
+[MIT License](LICENSE)。著作権表示とライセンス文を保持すれば、商用利用・改変・再配布が可能です。無保証で提供します。依存パッケージには、それぞれのライセンスが適用されます。
