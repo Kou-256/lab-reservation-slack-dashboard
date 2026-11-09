@@ -6,6 +6,7 @@ import {ganttView} from './gantt.js';
 import {dateFields,selectedDateTime} from './date-fields.js';
 import {bookingPeriod} from './booking-period.js';
 import {bookingStamp} from '../shared/booking-format.js';
+import {parseResourceOrder,orderedResources} from '../shared/resource-order.js';
 
 const $=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById(id) as T;
 const esc=(value:unknown)=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
@@ -15,7 +16,7 @@ const stamp=bookingStamp;
 const interval=(b:BookingView)=>`${stamp(b.start_at)} ～ ${stamp(b.end_at)}`;
 const actionButton=(text:string,command:string,id:string,disabled=false,cls='')=>`<button class="${cls}" data-command="${command}" data-id="${esc(id)}" ${disabled?'disabled':''}>${text}</button>`;
 let data:Snapshot|null=null,selected=new URL(location.href).searchParams.get('resource')??'',selectedDate=jstDate(Date.now()),received=0,receivedWall=0,serverTime=0,loading=false,failures=0;
-let displayMode=new URL(location.href).searchParams.get('view')==='gantt'?'gantt':'cards',ganttRange:'day'|'workday'='day';
+let displayMode=new URL(location.href).searchParams.get('view')==='gantt'?'gantt':'cards',ganttRange:'day'|'workday'='day',ganttExpanded=false,ganttFilters=false;
 let pollTimer:ReturnType<typeof setTimeout>|undefined,lastSignature='',lastRender='',busy=false;
 let pending:{action:string;resource:Equipment;row?:BookingView;minutes?:number;requestId:string;wire?:Record<string,unknown>;confirmed:boolean}|null=null;
 let wake:WakeLockSentinel|null=null;
@@ -42,7 +43,7 @@ async function api(path:string,body?:Record<string,unknown>) {
     return result;
   } finally {clearTimeout(timeout);}
 }
-function showUnlock(){data=null;lastSignature='';$('workspace').hidden=true;$('lock').hidden=true;$('pin-settings').hidden=true;$('unlock').hidden=false;$('main').replaceChildren();for(const id of ['booking-dialog','pin-dialog','history-dialog','gantt-dialog'])if($<HTMLDialogElement>(id).open)$<HTMLDialogElement>(id).close();if(pollTimer)clearTimeout(pollTimer);}
+function showUnlock(){document.body.dataset.ganttExpanded='false';data=null;lastSignature='';$('workspace').hidden=true;$('lock').hidden=true;$('pin-settings').hidden=true;$('unlock').hidden=false;$('main').replaceChildren();for(const id of ['booking-dialog','pin-dialog','history-dialog','gantt-dialog','order-dialog'])if($<HTMLDialogElement>(id).open)$<HTMLDialogElement>(id).close();if(pollTimer)clearTimeout(pollTimer);}
 $<HTMLFormElement>('unlock-form').onsubmit=async event=>{
   event.preventDefault();const form=event.currentTarget as HTMLFormElement,button=form.querySelector('button')!;button.disabled=true;$('unlock-error').textContent='';
   try{await api('unlock',{key:(new FormData(form).get('key')??'').toString()});form.reset();await refresh();}catch(error){$('unlock-error').textContent=message(error);}finally{button.disabled=false;}
@@ -68,12 +69,15 @@ $('refresh').onclick=()=>void refresh();
 
 for(const id of ['filter','sort'])$(id).addEventListener('change',render);
 $('gantt-toggle').onclick=()=>{selected='';displayMode=displayMode==='gantt'?'cards':'gantt';render();};
+if(parseResourceOrder(preferences('lab-resource-order')).length)$<HTMLSelectElement>('sort').value='custom';
+$('edit-order').onclick=()=>openOrder();
 $('search').addEventListener('input',()=>{selected='';render();});
 function update(){
   $('clock').textContent=new Intl.DateTimeFormat('ja-JP',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit',weekday:'short',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(now());
   if(!data)return;
   const states=data.resources.map(state),good=fresh();
   $('connection').textContent=!good?'情報が古くなっています':failures?'再接続中':'接続正常';$('connection').dataset.health=good&&!failures?'ok':'error';
+  if($('gantt-clock'))$('gantt-clock').textContent=time(now());if($('gantt-health'))$('gantt-health').textContent=$('connection').textContent;
   $('updated').textContent=`最終取得 ${time(serverTime)}:${new Date(serverTime).getUTCSeconds().toString().padStart(2,'0')}（${Math.floor(elapsed()/1000)}秒前）`;
   $('counts').innerHTML=`<span>登録設備 <b>${data.resources.length}</b></span><span>空きあり <b>${good?states.filter(s=>s.status!=='unavailable'&&s.available>0).length:'—'}</b></span><span>予約時間中 <b>${good?states.filter(s=>s.current.length).length:'—'}</b></span>`;
   if(!good){$('warning').textContent='最新の予約状態を確認できません。前回取得した情報を参考表示しています。予約操作は再接続後に行ってください。';$('warning').hidden=false;}
@@ -91,6 +95,7 @@ function render(){
   const main=$('main'),active=document.activeElement as HTMLElement|null,focus=active?.dataset.command&&{command:active.dataset.command,id:active.dataset.id};
   const resource=data.resources.find(r=>r.id===selected);if(selected&&!resource){selected='';toast('この設備の表示情報が変更されました。');}
   document.body.dataset.view=resource?'detail':displayMode==='gantt'?'gantt':'overview';
+  document.body.dataset.ganttExpanded=String(!resource&&displayMode==='gantt'&&ganttExpanded);document.body.dataset.ganttFilters=String(ganttFilters);
   $('gantt-toggle').textContent=displayMode==='gantt'&&!resource?'カード表示':'全体スケジュール';$('gantt-toggle').setAttribute('aria-pressed',String(displayMode==='gantt'&&!resource));
   if($<HTMLDialogElement>('gantt-dialog').open)$<HTMLDialogElement>('gantt-dialog').close();
   const displayURL=new URL(location.href);if(resource)displayURL.searchParams.set('resource',resource.id);else displayURL.searchParams.delete('resource');if(!resource&&displayMode==='gantt')displayURL.searchParams.set('view','gantt');else displayURL.searchParams.delete('view');history.replaceState(null,'',displayURL);
@@ -100,9 +105,10 @@ function render(){
     const search=$<HTMLInputElement>('search').value.trim().toLocaleLowerCase(),filter=$<HTMLSelectElement>('filter').value;
     let resources=data.resources.filter(r=>(r.name+' '+r.room).toLocaleLowerCase().includes(search)).filter(r=>{const s=state(r);return filter==='all'||filter==='free'&&s.available>0&&s.status!=='unavailable'&&s.status!=='unknown'||filter===s.status;});
     const sort=$<HTMLSelectElement>('sort').value;
+    if(sort==='custom')resources=orderedResources(resources,parseResourceOrder(preferences('lab-resource-order')));
     if(sort==='name')resources.sort((a,b)=>a.name.localeCompare(b.name,'ja'));
     if(sort==='next')resources.sort((a,b)=>(state(a).next[0]?.start_at??Infinity)-(state(b).next[0]?.start_at??Infinity));
-    if(displayMode==='gantt')main.innerHTML=ganttView(data,selectedDate,resources,now(),fresh(),ganttRange);
+    if(displayMode==='gantt')main.innerHTML=ganttView(data,selectedDate,resources,now(),fresh(),ganttRange,ganttExpanded,ganttFilters);
     else main.innerHTML=`<div class="list-heading"><h2>設備の予約状況</h2><span>設備を選ぶと大きく表示できます</span></div><div class="equipment-grid">${resources.map(card).join('')}</div>${resources.length?'':'<p class="empty">該当する設備はありません。絞り込みを変更してください。</p>'}`;
   }
   if(focus)main.querySelectorAll<HTMLElement>('[data-command]').forEach(el=>{if(el.dataset.command===focus.command&&el.dataset.id===focus.id)el.focus({preventScroll:true});});
@@ -149,6 +155,9 @@ document.addEventListener('click',event=>{
   if(target.dataset.day){selectedDate=target.dataset.day==='today'?jstDate(now()):jstDate(midnight(selectedDate)+Number(target.dataset.day)*DAY);void refresh();return;}
   const command=target.dataset.command,id=target.dataset.id!;if(!data)return;
   if(command==='gantt'){selected='';displayMode='gantt';render();$('main').focus();return;}
+  if(command==='order-up'||command==='order-down'){moveOrder(id,command==='order-up'?-1:1);return;}
+  if(command==='gantt-expand'){ganttExpanded=!ganttExpanded;render();return;}
+  if(command==='gantt-filters'){ganttExpanded=false;ganttFilters=!ganttFilters;render();return;}
   if(command==='gantt-booking'){openGanttBooking(id);return;}
   if(command==='history'){void openHistory(id);return;}
   if(command==='usage-info'){toast(target.dataset.label!);return;}
@@ -288,3 +297,15 @@ function syncDays(prefix:string){
  field('day').innerHTML=Array.from({length:max},(_,i)=>`<option value="${i+1}" ${i+1===Math.min(previous,max)?'selected':''}>${i+1}日</option>`).join('');
  if(previous>max)toast(`日数に合わせて${month}月${max}日に調整しました。`);
 }
+
+
+// ブラウザの全画面とは別に、Escapeで表の拡大表示を解除できる。
+document.addEventListener('keydown',event=>{if(event.key==='Escape'&&ganttExpanded&&!document.querySelector('dialog[open]')){ganttExpanded=false;render();}});
+
+const orderDialog=$<HTMLDialogElement>('order-dialog');let orderDraft:string[]=[];
+function openOrder(){if(!data)return;orderDraft=orderedResources(data.resources,parseResourceOrder(preferences('lab-resource-order'))).map(r=>r.id);renderOrder();orderDialog.showModal();}
+function renderOrder(){if(!data)return;$('order-list').innerHTML=orderDraft.map((id,index)=>`<li><span>${index+1}. ${esc(data!.resources.find(r=>r.id===id)?.name??id)}</span><div><button type="button" data-command="order-up" data-id="${esc(id)}" ${index===0?'disabled':''}>上へ</button><button type="button" data-command="order-down" data-id="${esc(id)}" ${index===orderDraft.length-1?'disabled':''}>下へ</button></div></li>`).join('');}
+function moveOrder(id:string,direction:number){const index=orderDraft.indexOf(id),next=index+direction;if(index<0||next<0||next>=orderDraft.length)return;[orderDraft[index],orderDraft[next]]=[orderDraft[next],orderDraft[index]];renderOrder();const button=[...$('order-list').querySelectorAll<HTMLButtonElement>('button')].find(b=>b.dataset.id===id&&b.dataset.command===(direction<0?'order-up':'order-down')&&!b.disabled);button?.focus();}
+$('order-close').onclick=()=>orderDialog.close();
+$('order-save').onclick=()=>{preferences('lab-resource-order',JSON.stringify(orderDraft));$<HTMLSelectElement>('sort').value='custom';orderDialog.close();render();toast('この端末の並び順を保存しました。');};
+$('order-reset').onclick=()=>{preferences('lab-resource-order','[]');$<HTMLSelectElement>('sort').value='default';orderDialog.close();render();toast('登録順に戻しました。');};

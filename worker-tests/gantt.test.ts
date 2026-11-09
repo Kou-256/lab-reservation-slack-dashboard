@@ -22,3 +22,8 @@ it('does not render another day as current, supports visible hour range and stal
  const html=ganttView(data,data.date,data.resources,start,false,'workday');
  expect(html).toContain('gantt-panel stale');expect(html).not.toContain('data-command="gantt-booking"');expect(html).toContain('08:00');expect(html).toContain('20:00');
 });
+it('greys out whole-equipment faults but leaves partially available equipment identifiable',()=>{
+ const fault={id:'fault',resource_id:'room',start_at:start-1,end_at:null,quantity:4,kind:'fault',reason:'点検'};
+ const whole=ganttView({...data,maintenance:[fault]},data.date,data.resources,start,true,'day');expect(whole).toContain('gantt-row unavailable');expect(whole).toContain('現在 利用不可');
+ const partial=ganttView({...data,maintenance:[{...fault,quantity:1}]},data.date,data.resources,start,true,'day');expect(partial).not.toContain('gantt-row unavailable');expect(partial).toContain('故障点検1台');
+});
