@@ -1,0 +1,73 @@
+/* 参考画像に合わせた予約端末の色。状態は必ず文字・形状と併用する。 */
+:root{--blue:#22649a;--free:#347aa3;--booked:#c90038;--soon:#9a5a00;--surface:#fff;--ground:#f3f6fa;--soft:#eef3f7;--line:#d7dce1;--terminal-free:linear-gradient(130deg,#30699e,#5ab9b6);--terminal-booked:linear-gradient(125deg,#d00036,#b9254d);--terminal-gray:linear-gradient(#b5b5b5,#777);--terminal-header:linear-gradient(110deg,#30699e,#5ab9b6)}
+:root[data-theme=dark]{--blue:#98d7f7;--surface:#172734;--ground:#101d27;--soft:#223c4e;--line:#395160;--terminal-header:linear-gradient(110deg,#214e77,#236a70)}
+.app-header,.equipment-title{background:var(--terminal-header)}.equipment-detail.booked .equipment-title{background:var(--terminal-booked)}.equipment-detail.booked .booking-time{color:var(--booked)}:root[data-theme=dark] .equipment-detail.booked .booking-time{color:#ffa0b5}
+button.primary{background:linear-gradient(#dc2779,#c0004b);border-color:#bc064c;color:white}button.primary:hover{background:#b60048}.back-button,button:not(.primary){transition:background-color .15s ease-out}
+.status-circle{background:var(--terminal-free);color:white!important;box-shadow:inset 0 0 0 1px #ffffff22}.status-circle strong{text-shadow:0 2px 3px #0005}.status-circle.booked{background:var(--terminal-booked);border-radius:12px}.status-circle.soon{background:linear-gradient(130deg,#ffd36d,#ef9c35);color:#4c3000!important;border-radius:12px}.status-circle.unavailable,.status-circle.unknown{background:var(--terminal-gray);border-radius:12px}
+.booking-time.no-booking{font-size:clamp(20px,2.5vw,36px);line-height:1.25;white-space:normal;overflow-wrap:normal}.card-booking,.display-reservation{min-width:0}.card-booking .booking-time{font-size:clamp(22px,2.1vw,32px)}
+.empty-lane{display:grid;place-items:center;min-height:28px;padding:0!important;line-height:1.2!important;border-bottom:0;white-space:nowrap}.compact .empty-lane{height:28px}.timeline-scroll{overflow-y:auto;scrollbar-width:thin}.time-block{background:#69ccef;color:#103e58}.time-block.active{background:#ee8c9d;color:#5b1022}.time-block:hover{background:#afe5f6}
+.stirrer-map{min-width:0;align-self:center}.stirrer-pools{display:grid;grid-template-columns:1fr 1fr;gap:12px}.stirrer-pool h3{font-size:14px;margin:0 0 3px;color:var(--blue)}.stirrer-pool p{font-size:12px;margin:0 0 4px;line-height:1.4}.stirrer-pool b{font-size:19px;color:var(--booked)}.stirrer-pool p span{white-space:nowrap}.stirrer-pool small{font-size:10px;display:block;color:var(--muted);line-height:1.3}.stirrer-units{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:2px}.stirrer-unit{width:100%;max-height:28px;color:#3a86ad}.stirrer-unit .vessel{fill:#fff9;stroke:currentColor;stroke-width:1.5}.stirrer-unit .liquid{fill:#85cfd4}.stirrer-unit .stir-bar{fill:currentColor}.stirrer-unit .motor,.stirrer-unit .plate{fill:currentColor}.stirrer-unit .dial{fill:white}.stirrer-unit .indicator{stroke:white;stroke-width:2}.stirrer-unit.reserved{color:#c90038}.stirrer-unit.reserved .liquid{fill:#f6a5b9}.stirrer-unit.reserved .stir-bar{animation:stir 1.25s linear infinite;transform-box:fill-box;transform-origin:center}.stirrer-unit.uncertain{color:#98670e}.stirrer-unit.uncertain .liquid{fill:#f4d78e}.stirrer-unit.offline,.stirrer-unit.unknown{color:#818b94}.stirrer-unit.offline .liquid,.stirrer-unit.unknown .liquid{fill:#d1d7db}.stirrer-legend{display:flex;flex-wrap:wrap;gap:3px 9px;font-size:10px;line-height:1.3;margin:6px 0 2px;color:var(--muted)}.legend-reserved{color:var(--booked)}.legend-available{color:var(--blue)}.stirrer-note{font-size:10px;line-height:1.3;color:var(--muted);margin:0}
+@keyframes stir{to{transform:rotate(360deg)}}
+.usage-axis,.usage-row{display:grid;grid-template-columns:94px minmax(0,1fr);gap:6px}.usage-axis{font-size:11px;color:var(--muted);height:20px;align-items:end;padding-right:7px}.usage-axis .time-ruler{height:19px;font-size:10px}.usage-row{height:34px;border-top:1px solid var(--line)}.usage-row>strong{font-size:12px;background:#b8ecf4;color:#163e58;display:flex;justify-content:center;flex-direction:column;padding:0 8px;line-height:1.15}.usage-row small{font-size:10px;font-weight:400;display:block;margin-top:2px}.usage-track{min-width:0;position:relative;background:var(--ground)}.usage-block{position:absolute;top:2px;height:29px;min-height:29px;min-width:0;padding:0 2px;overflow:hidden;border:0;border-radius:3px;background:#dceaf1;color:#22485e;font-size:12px;line-height:1.2;white-space:nowrap}.usage-block span{display:block;overflow:hidden;text-overflow:clip;pointer-events:none}.usage-block.reserved{background:#ef8da2;color:#5b1022}.usage-block.uncertain{background:#f4d78e;color:#503900}.usage-block:hover{filter:brightness(.94)}.usage-block:focus-visible{z-index:2}.quantity-schedule .schedule-heading{margin-bottom:4px}.quantity-schedule .schedule-heading span{font-size:10px}
+/* 横向きタブレットはページ全体をスクロールさせず、予約リストだけを独立してスクロールする。 */
+@media(min-width:751px) and (min-height:570px){
+ body[data-view=detail]{height:100dvh;display:flex;flex-direction:column;overflow:hidden}
+ body[data-view=detail] .app-header{height:48px;min-height:48px;padding:4px 18px}
+ body[data-view=detail] .app-header h1{font-size:19px;margin:0;white-space:nowrap}
+ body[data-view=detail] .header-right{display:flex;align-items:center;gap:10px;min-width:0}
+ body[data-view=detail] .header-right time{font-size:13px;white-space:nowrap}
+ body[data-view=detail] .header-actions{display:flex;gap:6px;margin:0}
+ body[data-view=detail] .header-button{min-height:36px;font-size:12px;padding:5px 10px}
+ body[data-view=detail] #workspace{width:100%;min-height:0;flex:1;display:flex;flex-direction:column;padding:0 14px 8px}
+ body[data-view=detail] .summary{height:42px;min-height:42px;padding:3px 0}
+ body[data-view=detail] #counts{gap:18px}body[data-view=detail] #counts b{font-size:20px}
+ body[data-view=detail] .connection{display:flex;gap:12px;font-size:10px}
+ body[data-view=detail] .connection strong{font-size:12px}body[data-view=detail] .connection button{min-height:34px;padding:4px 12px}
+ body[data-view=detail] .warning{font-size:12px;margin:4px 0 0;padding:6px 12px}
+ body[data-view=detail] footer{display:none}body[data-view=detail] main{flex:1;min-height:0;padding-top:6px;overflow:auto}
+ body[data-view=detail] .equipment-detail{height:100%;min-height:456px;display:grid;grid-template-rows:44px minmax(150px,1fr) 44px 96px minmax(90px,.8fr);border-radius:8px}
+ body[data-view=detail] .equipment-detail.has-stirrers{min-height:496px;grid-template-rows:44px minmax(200px,1fr) 44px 148px minmax(60px,.6fr)}
+ body[data-view=detail] .equipment-title{padding:0 14px;gap:14px}body[data-view=detail] .equipment-title h2{font-size:21px;line-height:1.2}
+ body[data-view=detail] .back-button{min-height:36px;padding:5px 12px;font-size:13px}
+ body[data-view=detail] .display-board{display:grid;grid-template-columns:142px minmax(0,1fr);padding:8px 20px;gap:18px;min-height:0;align-items:center}
+ body[data-view=detail] .has-stirrers .display-board{grid-template-columns:132px minmax(0,1fr) 288px;gap:12px;padding:6px 16px}
+ body[data-view=detail] .display-status .status-circle{width:112px;gap:4px;padding:8px}
+ body[data-view=detail] .display-status .status-circle strong{font-size:19px}
+ body[data-view=detail] .has-stirrers .display-status .status-circle{width:86px;gap:3px;padding:5px}
+ body[data-view=detail] .has-stirrers .display-status .status-circle strong{font-size:14px}
+ body[data-view=detail] .display-status .status-symbol{width:22px;height:22px}
+ body[data-view=detail] .has-stirrers .status-symbol{display:none}
+ body[data-view=detail] .display-status .quantities{gap:2px;font-size:10px;line-height:1.2;margin-top:6px}
+ body[data-view=detail] .display-status .quantities small{display:none}
+ body[data-view=detail] .display-reservation .purpose{font-size:19px;line-height:1.25;margin:0 0 3px}
+ body[data-view=detail] .display-reservation .booking-date{font-size:11px;line-height:1.2;margin:0 0 5px}
+ body[data-view=detail] .booking-time.large{font-size:clamp(30px,4.2vw,64px);line-height:1.05;margin:0 0 5px;padding:5px 0}
+ body[data-view=detail] .has-stirrers .booking-time.large{font-size:clamp(25px,3.1vw,48px)}
+ body[data-view=detail] .display-reservation .booking-person{font-size:12px;line-height:1.25}
+ body[data-view=detail] .display-reservation .next-note{font-size:10px;line-height:1.2;margin:4px 0 0}
+ body[data-view=detail] .display-actions{gap:8px;margin-top:8px}
+ body[data-view=detail] .display-actions button{min-height:44px;padding:7px 12px;font-size:14px}
+ body[data-view=detail] .date-navigation{gap:8px;padding:0 12px;align-items:center;margin:0}
+ body[data-view=detail] .date-navigation label{font-size:0;gap:0}
+ body[data-view=detail] .date-navigation input{font-size:12px;min-height:36px;padding:4px 8px}
+ body[data-view=detail] .date-navigation button{min-height:36px;padding:4px 14px;font-size:12px}
+ body[data-view=detail] .schedule{min-height:0;overflow:auto;padding:7px 18px 8px}
+ body[data-view=detail] .schedule-heading{font-size:12px;margin-bottom:5px;line-height:1.2}
+ body[data-view=detail] .timeline-scroll{max-height:calc(100% - 20px);padding-bottom:0}
+ body[data-view=detail] .time-ruler{height:18px;font-size:10px}
+ body[data-view=detail] .timeline-lane{height:38px}body[data-view=detail] .time-block{height:34px;min-height:34px;line-height:24px}
+ body[data-view=detail] .empty-lane{height:32px!important;min-height:32px}
+ body[data-view=detail] .detail-columns{min-height:0;overflow:auto;align-items:start;gap:22px;padding:0 18px 8px;border-top:1px solid var(--line);scrollbar-width:thin}
+ body[data-view=detail] .detail-columns>section{min-width:0}
+ body[data-view=detail] .detail-columns h3{font-size:13px;line-height:1.3;margin:8px 0 5px}
+ body[data-view=detail] .booking-row{padding:7px 0;flex-direction:row;gap:8px}
+ body[data-view=detail] .booking-row strong{font-size:12px}
+ body[data-view=detail] .booking-row span,body[data-view=detail] .booking-row p{font-size:11px;margin-top:3px}
+ body[data-view=detail] .row-actions{max-width:240px;gap:4px}
+ body[data-view=detail] .row-actions button{min-height:36px;padding:4px 8px;font-size:11px}
+ body[data-view=detail] .gap{font-size:12px;padding:5px 0}
+ body[data-view=detail] .detail-columns .muted{font-size:10px;line-height:1.3;margin:5px 0}
+}
+@media(max-width:750px){.stirrer-map{padding:4px 18px 20px}.stirrer-units{grid-template-columns:repeat(6,minmax(0,1fr))}.stirrer-unit{max-height:48px}.display-board>.stirrer-map{grid-column:1/-1}.usage-axis,.usage-row{grid-template-columns:80px minmax(0,1fr)}.usage-block{font-size:10px}.quantity-schedule .schedule-heading{flex-wrap:wrap}.card-booking .booking-time.no-booking{font-size:24px}.status-circle.booked strong span{white-space:normal}}
+@media(min-width:751px) and (max-height:650px){body[data-view=detail] .detail-columns{padding-bottom:0}body[data-view=detail] .detail-columns h3{margin:2px 0;line-height:14px}body[data-view=detail] .booking-row{padding:0}}
+@media(prefers-reduced-motion:reduce){.stirrer-unit.reserved .stir-bar{animation:none}button{transition:none!important}}

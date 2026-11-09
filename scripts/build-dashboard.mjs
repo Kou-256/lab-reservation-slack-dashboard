@@ -7,5 +7,6 @@ if(result.status!==0)process.exit(result.status??1);
 await mkdir('dist/web/dashboard/assets',{recursive:true});
 await copyFile('dashboard/index.html','dist/web/dashboard/index.html');
 await copyFile('dashboard/style.css','dist/web/dashboard/assets/style.css');
+await copyFile('dashboard/terminal.css','dist/web/dashboard/assets/terminal.css');
 await build({entryPoints:['dashboard/qr-scan.ts'],bundle:true,format:'esm',minify:true,target:'es2022',outfile:'dist/web/dashboard/assets/dashboard/qr-scan.js'});
 console.log('Dashboard built: dist/web/dashboard');
