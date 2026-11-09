@@ -1,13 +1,14 @@
 import {midnight,type Snapshot,type Equipment} from '../shared/dashboard.js';
 import {ganttLanes} from '../shared/gantt.js';
+import {bookingStamp,bookingDate} from '../shared/booking-format.js';
 const esc=(v:unknown)=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
-const stamp=(ms:number)=>new Intl.DateTimeFormat('ja-JP',{timeZone:'Asia/Tokyo',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).format(ms);
+const stamp=bookingStamp;
 const clock=(ms:number)=>new Intl.DateTimeFormat('ja-JP',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit',hour12:false}).format(ms);
 const color=(purpose:string)=>{let hash=0;for(const c of purpose)hash=(hash*31+c.charCodeAt(0))>>>0;return hash%5;};
 export function ganttView(data:Snapshot,date:string,resources:Equipment[],now:number,fresh:boolean,range:'day'|'workday'){
  const day=midnight(date),start=day+(range==='workday'?8:0)*3600000,end=day+(range==='workday'?20:24)*3600000,hours=(end-start)/3600000;
  const pos=(n:number)=>Math.max(0,Math.min(100,(n-start)/(end-start)*100));
- const controls=`<div class="gantt-heading"><h2>全体スケジュール</h2><div class="gantt-controls"><button data-day="-1" aria-label="前日の全体スケジュール">前日</button><label>表示日<input id="gantt-date" type="date" value="${date}"></label><button data-day="1" aria-label="翌日の全体スケジュール">翌日</button><button data-day="today">今日</button><label>時間帯<select id="gantt-range"><option value="day" ${range==='day'?'selected':''}>0〜24時</option><option value="workday" ${range==='workday'?'selected':''}>8〜20時</option></select></label></div></div>`;
+ const controls=`<div class="gantt-heading"><h2>全体スケジュール</h2><div class="gantt-controls"><button data-day="-1" aria-label="前日の全体スケジュール">前日</button><label>表示日 ${bookingDate(day)}<input id="gantt-date" type="date" value="${date}"></label><button data-day="1" aria-label="翌日の全体スケジュール">翌日</button><button data-day="today">今日</button><label>時間帯<select id="gantt-range"><option value="day" ${range==='day'?'selected':''}>0〜24時</option><option value="workday" ${range==='workday'?'selected':''}>8〜20時</option></select></label></div></div>`;
  if(data.date!==date)return `<section class="gantt-panel">${controls}<p role="status">この日のデータを取得しています…</p></section>`;
  const bookings=data.reservations.filter(b=>resources.some(r=>r.id===b.resource_id)&&b.start_at<end&&b.end_at>start);
  return `<section class="gantt-panel ${fresh?'':'stale'}">${controls}<p class="gantt-legend">${resources.length}設備・予約${bookings.length}件 ／ 色：用途別　赤枠：予約時間中　灰斜線：故障・点検<br><span>${fresh?'予約バーを押すと氏名・用途・日時・台数を確認できます。':'前回取得した情報です。再接続後に最新情報を確認してください。'}</span></p><div class="gantt-scroll" tabindex="0" aria-label="全設備の予約ガントチャート"><div class="gantt-table" style="--gantt-hour:${100/hours}%"><div class="gantt-ruler"><strong>施設・実験装置</strong><div>${Array.from({length:hours/2+1},(_,i)=>`<span style="left:${i*2/hours*100}%">${String((range==='workday'?8:0)+i*2).padStart(2,'0')}:00</span>`).join('')}</div></div>${resources.map(r=>{
