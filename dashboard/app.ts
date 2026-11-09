@@ -2,6 +2,8 @@ import {equipmentState,availability,DAY,jstDate,midnight,type Snapshot,type Equi
 import {occupancySegments} from '../shared/occupancy.js';
 import {stirrerIllustration} from './stirrer.js';
 import {durationLabel} from '../shared/duration.js';
+import {ganttView} from './gantt.js';
+import {dateFields,selectedDateTime} from './date-fields.js';
 
 const $=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById(id) as T;
 const esc=(value:unknown)=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
@@ -11,6 +13,7 @@ const stamp=(ms:number)=>`${jstDate(ms).slice(5).replace('-','/')} ${time(ms)}`;
 const interval=(b:BookingView)=>`${jstDate(b.start_at)===jstDate(b.end_at)?time(b.start_at):stamp(b.start_at)} ～ ${jstDate(b.start_at)===jstDate(b.end_at)?time(b.end_at):stamp(b.end_at)}`;
 const actionButton=(text:string,command:string,id:string,disabled=false,cls='')=>`<button class="${cls}" data-command="${command}" data-id="${esc(id)}" ${disabled?'disabled':''}>${text}</button>`;
 let data:Snapshot|null=null,selected=new URL(location.href).searchParams.get('resource')??'',selectedDate=jstDate(Date.now()),received=0,receivedWall=0,serverTime=0,loading=false,failures=0;
+let displayMode=new URL(location.href).searchParams.get('view')==='gantt'?'gantt':'cards',ganttRange:'day'|'workday'='day';
 let pollTimer:ReturnType<typeof setTimeout>|undefined,lastSignature='',lastRender='',busy=false;
 let pending:{action:string;resource:Equipment;row?:BookingView;minutes?:number;requestId:string;wire?:Record<string,unknown>;confirmed:boolean}|null=null;
 let wake:WakeLockSentinel|null=null;
@@ -37,7 +40,7 @@ async function api(path:string,body?:Record<string,unknown>) {
     return result;
   } finally {clearTimeout(timeout);}
 }
-function showUnlock(){data=null;lastSignature='';$('workspace').hidden=true;$('lock').hidden=true;$('pin-settings').hidden=true;$('unlock').hidden=false;$('main').replaceChildren();for(const id of ['booking-dialog','pin-dialog','history-dialog'])if($<HTMLDialogElement>(id).open)$<HTMLDialogElement>(id).close();if(pollTimer)clearTimeout(pollTimer);}
+function showUnlock(){data=null;lastSignature='';$('workspace').hidden=true;$('lock').hidden=true;$('pin-settings').hidden=true;$('unlock').hidden=false;$('main').replaceChildren();for(const id of ['booking-dialog','pin-dialog','history-dialog','gantt-dialog'])if($<HTMLDialogElement>(id).open)$<HTMLDialogElement>(id).close();if(pollTimer)clearTimeout(pollTimer);}
 $<HTMLFormElement>('unlock-form').onsubmit=async event=>{
   event.preventDefault();const form=event.currentTarget as HTMLFormElement,button=form.querySelector('button')!;button.disabled=true;$('unlock-error').textContent='';
   try{await api('unlock',{key:(new FormData(form).get('key')??'').toString()});form.reset();await refresh();}catch(error){$('unlock-error').textContent=message(error);}finally{button.disabled=false;}
@@ -62,6 +65,7 @@ async function refresh(){
 $('refresh').onclick=()=>void refresh();
 
 for(const id of ['filter','sort'])$(id).addEventListener('change',render);
+$('gantt-toggle').onclick=()=>{selected='';displayMode=displayMode==='gantt'?'cards':'gantt';render();};
 $('search').addEventListener('input',()=>{selected='';render();});
 function update(){
   $('clock').textContent=new Intl.DateTimeFormat('ja-JP',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit',weekday:'short',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(now());
@@ -80,10 +84,14 @@ function update(){
 }
 function render(){
   if(!data)return;
+  const previousScroll=document.querySelector<HTMLElement>('.gantt-scroll');
+  const chartScroll={top:previousScroll?.scrollTop??0,left:previousScroll?.scrollLeft??0};
   const main=$('main'),active=document.activeElement as HTMLElement|null,focus=active?.dataset.command&&{command:active.dataset.command,id:active.dataset.id};
   const resource=data.resources.find(r=>r.id===selected);if(selected&&!resource){selected='';toast('この設備の表示情報が変更されました。');}
-  document.body.dataset.view=resource?'detail':'overview';
-  const displayURL=new URL(location.href);if(resource)displayURL.searchParams.set('resource',resource.id);else displayURL.searchParams.delete('resource');history.replaceState(null,'',displayURL);
+  document.body.dataset.view=resource?'detail':displayMode==='gantt'?'gantt':'overview';
+  $('gantt-toggle').textContent=displayMode==='gantt'&&!resource?'カード表示':'全体スケジュール';$('gantt-toggle').setAttribute('aria-pressed',String(displayMode==='gantt'&&!resource));
+  if($<HTMLDialogElement>('gantt-dialog').open)$<HTMLDialogElement>('gantt-dialog').close();
+  const displayURL=new URL(location.href);if(resource)displayURL.searchParams.set('resource',resource.id);else displayURL.searchParams.delete('resource');if(!resource&&displayMode==='gantt')displayURL.searchParams.set('view','gantt');else displayURL.searchParams.delete('view');history.replaceState(null,'',displayURL);
 
   if(resource){main.innerHTML=detail(resource);}
   else {
@@ -92,17 +100,19 @@ function render(){
     const sort=$<HTMLSelectElement>('sort').value;
     if(sort==='name')resources.sort((a,b)=>a.name.localeCompare(b.name,'ja'));
     if(sort==='next')resources.sort((a,b)=>(state(a).next[0]?.start_at??Infinity)-(state(b).next[0]?.start_at??Infinity));
-    main.innerHTML=`<div class="list-heading"><h2>設備の予約状況</h2><span>設備を選ぶと大きく表示できます</span></div><div class="equipment-grid">${resources.map(card).join('')}</div>${resources.length?'':'<p class="empty">該当する設備はありません。絞り込みを変更してください。</p>'}`;
+    if(displayMode==='gantt')main.innerHTML=ganttView(data,selectedDate,resources,now(),fresh(),ganttRange);
+    else main.innerHTML=`<div class="list-heading"><h2>設備の予約状況</h2><span>設備を選ぶと大きく表示できます</span></div><div class="equipment-grid">${resources.map(card).join('')}</div>${resources.length?'':'<p class="empty">該当する設備はありません。絞り込みを変更してください。</p>'}`;
   }
   if(focus)main.querySelectorAll<HTMLElement>('[data-command]').forEach(el=>{if(el.dataset.command===focus.command&&el.dataset.id===focus.id)el.focus({preventScroll:true});});
+  const nextScroll=main.querySelector<HTMLElement>('.gantt-scroll');if(nextScroll){nextScroll.scrollTop=chartScroll.top;nextScroll.scrollLeft=chartScroll.left;}
 }
 function bookingInfo(r:Equipment,s:EquipmentState,large=false){
   const rows=s.current.length?s.current:s.next,b=rows[0];
   if(!b)return `<p class="booking-time no-booking">次の予約なし</p><p class="muted">本日の空き時間は下のスケジュールで確認できます</p>`;
-  return `<p class="purpose">${esc(b.purpose||'用途の記載なし')}</p><p class="booking-date">${s.current.length?'現在の予約':'次の予約'}${s.current.length>1?`・${s.current.length}件`:''} ／ ${esc(dateLabel(jstDate(b.start_at)))}${jstDate(b.start_at)!==jstDate(b.end_at)?' ～ '+esc(dateLabel(jstDate(b.end_at))):''}</p><p class="booking-time ${large?'large':''} ${jstDate(b.start_at)!==jstDate(b.end_at)?'cross-day':''}">${esc(interval(b))}</p><div class="booking-person"><span>${esc(b.person)}${rows.length>1?` ほか${rows.length-1}件`:''}</span>${r.type==='quantity_resource'?`<span>${b.quantity}台${b.pool_id?'・'+esc(r.pools.find(p=>p.id===b.pool_id)?.name??''):''}</span>`:''}</div>${s.next[0]&&!large?`<p class="next-note">${s.current.length?'次回 '+esc(stamp(s.next[0].start_at))+' ／ ':''}<span data-countdown="${s.next[0].start_at}">あと${durationLabel(s.next[0].start_at-now())}</span></p>`:''}`;
+  return `<p class="purpose">${esc(b.purpose||'用途の記載なし')}</p><p class="booking-date">${s.current.length?'現在の予約':'次の予約'}${s.current.length>1?`・${s.current.length}件`:''} ／ ${esc(dateLabel(jstDate(b.start_at)))}${jstDate(b.start_at)!==jstDate(b.end_at)?' ～ '+esc(dateLabel(jstDate(b.end_at))):''}${large&&!s.current.length?` ／ <span data-countdown="${b.start_at}">あと${durationLabel(b.start_at-now())}</span>`:''}</p><p class="booking-time ${large?'large':''} ${jstDate(b.start_at)!==jstDate(b.end_at)?'cross-day':''}">${esc(interval(b))}</p><div class="booking-person"><span>${esc(b.person)}${rows.length>1?` ほか${rows.length-1}件`:''}</span>${r.type==='quantity_resource'?`<span>${b.quantity}台${b.pool_id?'・'+esc(r.pools.find(p=>p.id===b.pool_id)?.name??''):''}</span>`:''}</div>${s.next[0]&&!large?`<p class="next-note">${s.current.length?'次回 '+esc(stamp(s.next[0].start_at))+' ／ ':''}<span data-countdown="${s.next[0].start_at}">あと${durationLabel(s.next[0].start_at-now())}</span></p>`:''}`;
 }
-// 次の予約者は、状態・台数の下の専用枠で常に確認できる。
-function nextPreview(s:EquipmentState){const b=s.next[0];return `<aside class="next-preview"><h3>次の予約</h3>${b?`<p class="next-person">${esc(b.person)}${s.next.length>1?` ほか${s.next.length-1}件`:''}</p><p>${esc(stamp(b.start_at))}〜</p>`:'<p>予定なし</p>'}</aside>`;}
+// 予約時間中だけ左側に次の予約を表示する。空き状態では中央の表示と重複させない。
+function nextPreview(s:EquipmentState){if(!s.current.length)return '';const b=s.next[0];return `<aside class="next-preview"><h3>次の予約</h3>${b?`<p class="next-person">${esc(b.person)}${s.next.length>1?` ほか${s.next.length-1}件`:''}</p><p>${esc(stamp(b.start_at))}〜</p>`:'<p>予定なし</p>'}</aside>`;}
 function statusCircle(s:EquipmentState){const label=s.label.split('・').map(part=>`<span>${esc(part)}</span>`).join('');const shape={free:'<path d="m5 12 4 4 10-10"/>',soon:'<circle cx="12" cy="12" r="9"/><path d="M12 6v6h5"/>',booked:'<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4m8-4v4M4 10h16"/>',unavailable:'<path d="M5 12h14"/><circle cx="12" cy="12" r="9"/>',unknown:'<path d="M8 8a4 4 0 1 1 6 3.5c-2 1-2 2-2 3M12 18v1"/>'}[s.status];return `<div class="status-circle ${s.status}" aria-label="${esc(s.label)}"><svg class="status-symbol" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${shape}</svg><strong>${label}</strong>${s.status==='unknown'?'<small>最終取得時点の情報</small>':''}</div>`;}
 function quantities(r:Equipment,s:EquipmentState){return r.type==='quantity_resource'?`<div class="quantities"><strong>予約可能 ${fresh()?s.available:'—'} / ${r.capacity??'未設定'}台</strong><span class="quantity-item">予約中 ${s.current.reduce((n,b)=>n+b.quantity,0)}台</span><span class="quantity-item">故障点検 ${s.offline}台</span>${s.poolAvailable.map(p=>`<span class="pool-free">${esc(p.name)}：${fresh()?p.available:'—'}台空き</span>`).join('')}${s.current.some(b=>!b.pool_id)&&r.pools.length?'<small>場所未設定予約は各場所の空きから差し引いています</small>':''}</div>`:'';}
 function card(r:Equipment){const s=state(r);return `<article class="equipment-card ${s.status}"><header><h3>${esc(r.name)}</h3></header><div class="card-body"><div class="card-status">${statusCircle(s)}</div><div class="card-booking">${bookingInfo(r,s)}</div></div>${quantities(r,s)}<div class="card-actions">${actionButton('大きく表示・詳細','detail',r.id)}${actionButton('予約する','create',r.id,!fresh()||!r.enabled||r.capacity===null,'primary')}</div>${timeline(r,selectedDate,true)}</article>`;}
@@ -126,7 +136,7 @@ function detail(r:Equipment){
   const s=state(r),start=midnight(selectedDate),end=start+DAY,rows=data!.reservations.filter(b=>b.resource_id===r.id&&b.start_at<end&&b.end_at>start);
   const gaps=availability(r,data!.reservations,data!.maintenance,start,end).filter(g=>g.quantity>0);
   const stops=data!.maintenance.filter(m=>m.resource_id===r.id&&m.start_at<end&&(m.end_at===null||m.end_at>start));
-  return `<section class="equipment-detail ${s.status} ${r.pools.length?'has-stirrers':''}"><div class="equipment-title"><div><span class="room">${esc(r.room)}</span><h2>${esc(r.name)}</h2></div><span>予約状態</span></div><div class="display-board"><div class="display-status">${statusCircle(s)}${quantities(r,s)}${nextPreview(s)}</div><div class="display-reservation">${bookingInfo(r,s,true)}<div class="display-actions">${actionButton('今すぐ予約','now',r.id,!fresh()||!r.enabled||r.capacity===null,'primary')}${actionButton('日時を指定して予約','create',r.id,!fresh()||!r.enabled||r.capacity===null)}</div></div>${r.pools.length?stirrerIllustration(r,data!.reservations,data!.maintenance,now(),fresh()):''}</div><div class="date-navigation"><button data-day="-1" aria-label="前日の予約">前日</button><label>表示日<input id="schedule-date" type="date" value="${selectedDate}"></label><button data-day="1" aria-label="翌日の予約">翌日</button><button data-day="today">今日</button><button data-command="history" data-id="${esc(r.id)}">過去の履歴</button></div>${timeline(r,selectedDate)}<div class="detail-columns"><section><h3>${esc(dateLabel(selectedDate))}の予約</h3>${rows.length?rows.map(b=>bookingRow(r,b)).join(''):'<p class="empty">この日の予約はありません</p>'}${stops.map(m=>`<p class="maintenance-note">故障・点検：${esc(m.reason)}<br>${esc(stamp(m.start_at))} ～ ${m.end_at===null?'復旧まで':esc(stamp(m.end_at))}${m.quantity?`・${m.quantity}台`:''}</p>`).join('')}</section><section><h3>空き時間${r.type==='quantity_resource'?'・予約可能台数':''}</h3>${fresh()?gaps.length?gaps.map(g=>`<p class="gap"><span>${time(g.start)} ～ ${g.end===end?'24:00':time(g.end)}</span><strong>${r.type==='quantity_resource'?g.quantity+'台':'空き'}</strong></p>`).join(''):'<p class="empty">予約できる時間帯はありません</p>':'<p class="empty">再接続後に確認できます</p>'}<p class="muted">${r.pools.length?'台数は全体の空きです。場所別の上限は予約時に確認します。':'確定時に最新の空きを再確認します。'}</p><p class="muted">翌日以降は上の日付で確認できます。</p></section></div></section>`;
+  return `<section class="equipment-detail ${s.status} ${r.pools.length?'has-stirrers':''}"><div class="equipment-title"><div><span class="room">${esc(r.room)}</span><h2>${esc(r.name)}</h2></div><button class="gantt-open" data-command="gantt">全体スケジュール</button></div><div class="display-board"><div class="display-status">${statusCircle(s)}${quantities(r,s)}${nextPreview(s)}</div><div class="display-reservation">${bookingInfo(r,s,true)}<div class="display-actions">${actionButton('今すぐ予約','now',r.id,!fresh()||!r.enabled||r.capacity===null,'primary')}${actionButton('日時を指定して予約','create',r.id,!fresh()||!r.enabled||r.capacity===null)}</div></div>${r.pools.length?stirrerIllustration(r,data!.reservations,data!.maintenance,now(),fresh()):''}</div><div class="date-navigation"><button data-day="-1" aria-label="前日の予約">前日</button><label>表示日<input id="schedule-date" type="date" value="${selectedDate}"></label><button data-day="1" aria-label="翌日の予約">翌日</button><button data-day="today">今日</button><button data-command="history" data-id="${esc(r.id)}">過去の履歴</button></div>${timeline(r,selectedDate)}<div class="detail-columns"><section><h3>${esc(dateLabel(selectedDate))}の予約</h3>${rows.length?rows.map(b=>bookingRow(r,b)).join(''):'<p class="empty">この日の予約はありません</p>'}${stops.map(m=>`<p class="maintenance-note">故障・点検：${esc(m.reason)}<br>${esc(stamp(m.start_at))} ～ ${m.end_at===null?'復旧まで':esc(stamp(m.end_at))}${m.quantity?`・${m.quantity}台`:''}</p>`).join('')}</section><section><h3>空き時間${r.type==='quantity_resource'?'・予約可能台数':''}</h3>${fresh()?gaps.length?gaps.map(g=>`<p class="gap"><span>${time(g.start)} ～ ${g.end===end?'24:00':time(g.end)}</span><strong>${r.type==='quantity_resource'?g.quantity+'台':'空き'}</strong></p>`).join(''):'<p class="empty">予約できる時間帯はありません</p>':'<p class="empty">再接続後に確認できます</p>'}<p class="muted">${r.pools.length?'台数は全体の空きです。場所別の上限は予約時に確認します。':'確定時に最新の空きを再確認します。'}</p><p class="muted">翌日以降は上の日付で確認できます。</p></section></div></section>`;
 }
 function bookingRow(r:Equipment,b:BookingView){const active=b.start_at<now()&&now()<b.end_at;return `<article class="booking-row" id="booking-${esc(b.id)}"><div><strong>${esc(interval(b))}</strong><span>${esc(b.person)}${r.type==='quantity_resource'?'・'+b.quantity+'台':''}${b.pool_id?'・'+esc(r.pools.find(p=>p.id===b.pool_id)?.name??''):''}</span><p>${esc(b.purpose||'用途の記載なし')}</p></div>${b.end_at>now()?`<div class="row-actions">${actionButton('変更','edit',b.id,!fresh())}${actionButton('キャンセル','cancel',b.id,!fresh())}${active?actionButton('今すぐ終了','finish',b.id,!fresh())+actionButton('30分延長','extend',b.id,!fresh()):''}</div>`:'<span class="ended">終了</span>'}</article>`;}
 document.addEventListener('click',event=>{
@@ -134,17 +144,18 @@ document.addEventListener('click',event=>{
   if(target.hasAttribute('data-close')){if(!busy)$<HTMLDialogElement>('booking-dialog').close();return;}
   if(target.dataset.day){selectedDate=target.dataset.day==='today'?jstDate(now()):jstDate(midnight(selectedDate)+Number(target.dataset.day)*DAY);void refresh();return;}
   const command=target.dataset.command,id=target.dataset.id!;if(!data)return;
+  if(command==='gantt'){selected='';displayMode='gantt';render();$('main').focus();return;}
+  if(command==='gantt-booking'){openGanttBooking(id);return;}
   if(command==='history'){void openHistory(id);return;}
   if(command==='usage-info'){toast(target.dataset.label!);return;}
-  if(command==='overview'){selected='';render();$('main').focus();return;}
+  if(command==='overview'){selected='';displayMode='cards';render();$('main').focus();return;}
   if(command==='detail'){selected=id;render();$('main').focus();return;}
   if(command==='booking-detail'){$('booking-'+id)?.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth',block:'center'});return;}
   const row=data.reservations.find(b=>b.id===id),r=data.resources.find(r=>r.id===(row?.resource_id??id));if(!r)return;
   openBooking(r,command==='now'?'create':command==='edit'?'update':command!,row,command==='now');
 });
-document.addEventListener('change',event=>{const target=event.target as HTMLInputElement;if(target.id==='schedule-date'&&target.value){selectedDate=target.value;void refresh();}if(target.name==='purpose_choice')togglePurpose();});
+document.addEventListener('change',event=>{const target=event.target as HTMLInputElement;if(target.id==='gantt-range'){ganttRange=target.value==='workday'?'workday':'day';render();return;}if((target.id==='schedule-date'||target.id==='gantt-date')&&target.value){selectedDate=target.value;void refresh();}if(target.name==='purpose_choice')togglePurpose();if(/^(start|end)_(year|month)$/.test(target.name))syncDays(target.name.split('_')[0]);});
 function togglePurpose(){const form=$<HTMLFormElement>('booking-form'),choice=form.elements.namedItem('purpose_choice') as HTMLSelectElement|null,purpose=form.elements.namedItem('purpose') as HTMLTextAreaElement|null;if(purpose)purpose.closest('label')!.hidden=Boolean(choice&&choice.value&&choice.value!=='自由入力');}
-function localInput(ms:number){return jstDate(ms)+'T'+time(ms);}
 function openBooking(r:Equipment,action:string,row?:BookingView,startNow=false){
   if(!fresh()){toast('最新情報を取得してから予約してください。');return;}
   const dialog=$<HTMLDialogElement>('booking-dialog'),form=$<HTMLFormElement>('booking-form');form.reset();
@@ -153,7 +164,7 @@ function openBooking(r:Equipment,action:string,row?:BookingView,startNow=false){
   $('booking-title').textContent=({create:startNow?'今すぐ予約':'日時を指定して予約',update:'予約を変更',cancel:'予約をキャンセル',finish:'利用を今すぐ終了',extend:'予約を30分延長'} as Record<string,string>)[action];
   $('booking-equipment').textContent=r.name+(row?' ／ '+row.person+' ／ '+interval(row):'');
   const choice=row?(row.purpose&&r.purposes.includes(row.purpose)?row.purpose:'自由入力'):r.purposes[0]??'';
-  $('booking-fields').innerHTML=['create','update'].includes(action)?`<div class="form-grid">${startNow?'<p class="start-now">開始：予約確定時の現在時刻</p>':`<label>開始日時（JST）<input name="start" type="datetime-local" required value="${localInput(row?.start_at??start)}"></label>`}<label>終了日時（JST）<input name="end" type="datetime-local" required value="${localInput(row?.end_at??start+3600000)}"></label>${r.type==='quantity_resource'?`<label>使用台数<input name="quantity" type="number" inputmode="numeric" required min="1" max="${r.capacity??1}" step="1" value="${row?.quantity??1}"></label>`:''}${r.pools.length?`<label>使用場所<select name="pool_id" required><option value="">選択してください</option>${r.pools.map(p=>`<option value="${esc(p.id)}" ${row?.pool_id===p.id?'selected':''}>${esc(p.name)}（${p.capacity}台）</option>`).join('')}</select></label>`:''}</div>${r.purposes.length?`<label>用途<select name="purpose_choice">${r.purposes.map(p=>`<option ${p===choice?'selected':''}>${esc(p)}</option>`).join('')}</select></label>`:''}<label>用途の内容<textarea name="purpose" maxlength="300" rows="2" placeholder="例：試料の測定">${esc(row?.purpose??'')}</textarea></label><input type="hidden" name="start_now" value="${startNow?'1':'0'}">`:`<p class="confirm-operation">${esc(({cancel:'この予約をキャンセルします。確定後は予約枠が解放されます。',finish:'終了時刻を確定時点の現在時刻に変更します。実稼働の記録ではありません。',extend:'終了時刻を30分延長します。他の予約と重なる場合は保存できません。'} as Record<string,string>)[action])}</p>`;
+  $('booking-fields').innerHTML=['create','update'].includes(action)?`<div class="form-grid">${startNow?'<p class="start-now">開始：予約確定時の現在時刻</p>':dateFields('start',row?.start_at??start,now())}${dateFields('end',row?.end_at??start+3600000,now())}${r.type==='quantity_resource'?`<label>使用台数<select name="quantity" required>${row&&row.quantity>(r.capacity??1)?`<option value="${row.quantity}" selected>${row.quantity}台（現在の予約）</option>`:''}${Array.from({length:r.capacity??1},(_,i)=>`<option value="${i+1}" ${i+1===(row?.quantity??1)?'selected':''}>${i+1}台</option>`).join('')}</select></label>`:''}${r.pools.length?`<label>使用場所<select name="pool_id" required><option value="">選択してください</option>${r.pools.map(p=>`<option value="${esc(p.id)}" ${row?.pool_id===p.id?'selected':''}>${esc(p.name)}（${p.capacity}台）</option>`).join('')}</select></label>`:''}</div>${r.purposes.length?`<label>用途<select name="purpose_choice">${r.purposes.map(p=>`<option ${p===choice?'selected':''}>${esc(p)}</option>`).join('')}</select></label>`:''}<label>用途の内容<textarea name="purpose" maxlength="300" rows="2" placeholder="例：試料の測定">${esc(row?.purpose??'')}</textarea></label><input type="hidden" name="start_now" value="${startNow?'1':'0'}">`:`<p class="confirm-operation">${esc(({cancel:'この予約をキャンセルします。確定後は予約枠が解放されます。',finish:'終了時刻を確定時点の現在時刻に変更します。実稼働の記録ではありません。',extend:'終了時刻を30分延長します。他の予約と重なる場合は保存できません。'} as Record<string,string>)[action])}</p>`;
   const users=form.elements.namedItem('user') as HTMLSelectElement;users.innerHTML='<option value="">選択してください</option>'+data!.members.map(m=>`<option value="${esc(m.id)}">${esc(m.name)}</option>`).join('');
   $('booking-error').textContent='';$('booking-submit').textContent='内容を確認する';$('booking-note').textContent='個人PINはこの操作の確認にだけ使い、端末に保存しません。';togglePurpose();dialog.showModal();
 }
@@ -168,7 +179,7 @@ form.onsubmit=async event=>{
   const values=new FormData(form),p=pending;
   const wire:Record<string,unknown>={request_id:p.requestId,action:p.action,resource_id:p.resource.id,user:values.get('user'),reservation_id:p.row?.id,version:p.row?.version,minutes:p.minutes};
   if(['create','update'].includes(p.action)){
-    const startNow=values.get('start_now')==='1',start=startNow?Math.ceil(now()/60000)*60000:Date.parse(values.get('start')+'+09:00'),end=Date.parse(values.get('end')+'+09:00');
+    const startNow=values.get('start_now')==='1',start=startNow?Math.ceil(now()/60000)*60000:Date.parse(selectedDateTime(values,'start')+'+09:00'),end=Date.parse(selectedDateTime(values,'end')+'+09:00');
     if(!Number.isFinite(start)||!Number.isFinite(end)||end<=start||end<=now()){$('booking-error').textContent='終了は開始・現在時刻より後にしてください。';return;}
     const choice=values.get('purpose_choice')?.toString()??'';
     Object.assign(wire,{start_now:startNow,start_at:start,end_at:end,quantity:Number(values.get('quantity')??1),pool_id:values.get('pool_id')||null,purpose_choice:choice==='自由入力'?'':choice,purpose:!choice||choice==='自由入力'?values.get('purpose')?.toString().trim()??'':choice});
@@ -185,7 +196,7 @@ const dialog=$<HTMLDialogElement>('booking-dialog');dialog.addEventListener('can
 window.addEventListener('online',()=>{failures=0;void refresh();});
 document.addEventListener('visibilitychange',()=>{if(!document.hidden){void refresh();void keepAwake();}});
 setInterval(update,1000);
-setInterval(()=>{if(selected&&data&&fresh())render();},60000);
+setInterval(()=>{if((selected||displayMode==='gantt')&&data&&fresh())render();},60000);
 
 const pinDialog=$<HTMLDialogElement>('pin-dialog'),pinForm=$<HTMLFormElement>('pin-form');let changingPIN=false;
 $('pin-settings').onclick=()=>{
@@ -258,3 +269,18 @@ $('history-close').onclick=()=>historyDialog.close();
 historyDialog.addEventListener('close',()=>{historySequence++;historyResource=null;historyCursor=null;$('history-list').replaceChildren();});
 historyForm.onsubmit=event=>{event.preventDefault();void loadHistory(true);};
 $('history-more').onclick=()=>void loadHistory(false);
+
+function openGanttBooking(id:string){
+ const b=data?.reservations.find(row=>row.id===id);if(!b)return;const r=data!.resources.find(item=>item.id===b.resource_id)!;
+ $('gantt-info').innerHTML=`<h3>${esc(r.name)}</h3><p class="gantt-info-time">${esc(stamp(b.start_at))} 〜 ${esc(stamp(b.end_at))}</p><dl><dt>予約者</dt><dd>${esc(b.person)}</dd><dt>用途</dt><dd>${esc(b.purpose||'用途の記載なし')}</dd>${r.type==='quantity_resource'?`<dt>台数・場所</dt><dd>${b.quantity}台・${esc(r.pools.find(p=>p.id===b.pool_id)?.name??'場所未設定')}</dd>`:''}</dl>`;
+ $('gantt-detail').onclick=()=>{$<HTMLDialogElement>('gantt-dialog').close();selected=r.id;render();$('main').focus();};
+ $<HTMLDialogElement>('gantt-dialog').showModal();
+}
+$('gantt-close').onclick=()=>$<HTMLDialogElement>('gantt-dialog').close();
+
+function syncDays(prefix:string){
+ const field=(suffix:string)=>form.elements.namedItem(prefix+'_'+suffix) as HTMLSelectElement;
+ const year=Number(field('year').value),month=Number(field('month').value),previous=Number(field('day').value),max=new Date(Date.UTC(year,month,0)).getUTCDate();
+ field('day').innerHTML=Array.from({length:max},(_,i)=>`<option value="${i+1}" ${i+1===Math.min(previous,max)?'selected':''}>${i+1}日</option>`).join('');
+ if(previous>max)toast(`日数に合わせて${month}月${max}日に調整しました。`);
+}

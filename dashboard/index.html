@@ -25,6 +25,7 @@
     <section class="summary" aria-label="設備と接続の概要"><div id="counts"></div><div class="connection"><strong id="connection">接続中</strong><span id="updated">まだ取得していません</span><button id="refresh">更新</button></div></section>
     <p id="warning" class="warning" role="status" hidden></p>
     <nav class="toolbar" aria-label="表示を切り替え">
+      <button id="gantt-toggle" type="button" aria-pressed="false">全体スケジュール</button>
 
       <label class="search-label">設備・部屋を検索<input id="search" type="search" placeholder="設備名・部屋名" autocomplete="off"></label>
       <label>状態<select id="filter"><option value="all">すべて</option><option value="free">空きあり</option><option value="soon">まもなく開始</option><option value="booked">予約時間中</option><option value="unavailable">利用不可・受付停止</option></select></label>
@@ -41,6 +42,7 @@
     <p id="booking-error" class="form-error" role="alert"></p><p id="booking-note" class="muted">確定時に最新の予約・故障点検と照合します。</p>
     <div class="dialog-actions"><button type="button" data-close>戻る</button><button id="booking-submit" class="primary" type="submit">内容を確認する</button></div>
   </form></dialog>
+  <dialog id="gantt-dialog" aria-labelledby="gantt-dialog-title"><div class="dialog-heading"><h2 id="gantt-dialog-title">予約の詳細</h2><button id="gantt-close" type="button">閉じる</button></div><div id="gantt-info"></div><button id="gantt-detail" type="button">この設備の詳細を開く</button></dialog>
   <dialog id="history-dialog" aria-labelledby="history-title">
     <div class="dialog-heading"><h2 id="history-title">過去の履歴</h2><button id="history-close" type="button">閉じる</button></div>
     <p id="history-equipment"></p><p class="muted">終了した予約の記録です。実稼働は検知していません。キャンセルした予約は含みません。</p>
