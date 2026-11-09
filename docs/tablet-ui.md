@@ -9,3 +9,17 @@
 横向きタブレットの詳細画面は表示領域に合わせて配置し、下部の予約一覧を独立してスクロールできます。小さい縦長画面では通常のページスクロールを使います。
 
 変更箇所は `dashboard/terminal.css`（配色・配置）、`dashboard/stirrer.ts`（SVG）、`shared/occupancy.ts`（台数集計）、`dashboard/app.ts`（画面への組み込み）です。ビルドスクリプトが追加のCSSとモジュールを配信します。既存の予約保存処理・DB構造の変更や新しい実行時依存パッケージの追加はありません。
+
+## 可読性と操作
+
+カードのカレンダーは高さと下端をそろえ、予約情報の有無で位置がずれないようにしています。画面名のボタンから一覧に戻れます。スターラーは左列の上から下、次の列の上から下の順に並べます。次の予約までの時間は「あと1日2時間30分」の形式で表示します。
+
+[Astryxの文字階層](https://github.com/meta/astryx/blob/main/docs/design/typography-hierarchy.md)と[余白ガイド](https://github.com/meta/astryx/blob/main/packages/cli/assets/docs/tree/layout-spacing.doc.mjs)を参照し、既存TypeScript画面の見出し・本文・補助情報と操作部品の大きさを整理しています。
+
+ヒラギノ角ゴシックは端末にインストールされたフォントを参照します。フォントファイルは公開版に含まれません。利用に必要な権利のある`hiragino.zip`を別途用意し、`scripts/install-tablet-font.ps1`と同じフォルダーに置いて、ダッシュボードを使うWindowsユーザーで次を実行します。
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install-tablet-font.ps1
+```
+
+現在のユーザーにW3/W6を登録します。サインアウトして再サインインした後、Edgeを起動してください。未導入の端末では代替フォントを利用します。
