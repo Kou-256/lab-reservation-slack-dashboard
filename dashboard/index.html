@@ -25,7 +25,7 @@
     <section class="summary" aria-label="設備と接続の概要"><div id="counts"></div><div class="connection"><strong id="connection">接続中</strong><span id="updated">まだ取得していません</span><button id="refresh">更新</button></div></section>
     <p id="warning" class="warning" role="status" hidden></p>
     <nav class="toolbar" aria-label="表示を切り替え">
-      <button id="overview" aria-current="page">設備一覧</button>
+
       <label class="search-label">設備・部屋を検索<input id="search" type="search" placeholder="設備名・部屋名" autocomplete="off"></label>
       <label>状態<select id="filter"><option value="all">すべて</option><option value="free">空きあり</option><option value="soon">まもなく開始</option><option value="booked">予約時間中</option><option value="unavailable">利用不可・受付停止</option></select></label>
       <label>並び順<select id="sort"><option value="default">登録順</option><option value="name">設備名順</option><option value="next">次の予約が近い順</option></select></label>
@@ -41,6 +41,12 @@
     <p id="booking-error" class="form-error" role="alert"></p><p id="booking-note" class="muted">確定時に最新の予約・故障点検と照合します。</p>
     <div class="dialog-actions"><button type="button" data-close>戻る</button><button id="booking-submit" class="primary" type="submit">内容を確認する</button></div>
   </form></dialog>
+  <dialog id="history-dialog" aria-labelledby="history-title">
+    <div class="dialog-heading"><h2 id="history-title">過去の履歴</h2><button id="history-close" type="button">閉じる</button></div>
+    <p id="history-equipment"></p><p class="muted">終了した予約の記録です。実稼働は検知していません。キャンセルした予約は含みません。</p>
+    <form id="history-form" class="history-controls"><label>終了日の開始<input name="from" type="date" required></label><label>終了日の最終<input name="to" type="date" required></label><button type="submit">表示する</button></form>
+    <p id="history-message" role="status"></p><div id="history-list"></div><button id="history-more" type="button" hidden>さらに30件を表示</button>
+  </dialog>
   <dialog id="pin-dialog" aria-labelledby="pin-title"><form id="pin-form">
     <div class="dialog-heading"><h2 id="pin-title">個人PINを変更</h2><button id="pin-close" type="button">閉じる</button></div>
     <p class="muted">初期PINは0000です。変更後のPINは保存・表示せず、ハッシュだけを管理します。</p>

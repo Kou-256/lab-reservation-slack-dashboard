@@ -21,7 +21,8 @@ it('SVG depicts counts rather than device identity and stops reservation animati
  const rows=[booking('a',0,100,3,'inside')];
  const live=stirrerIllustration(resource,rows,[],50,true);
  expect((live.match(/data-state="reserved"/g)||[]).length).toBe(3);
- expect((live.match(/<svg /g)||[]).length).toBe(20);
+ expect((live.match(/class="stirrer-unit /g)||[]).length).toBe(20);
+ expect((live.match(/class="stirrer-screen"/g)||[]).length).toBe(5);
  expect(live).toContain('実稼働・個体の割当は示しません');
  const stale=stirrerIllustration(resource,rows,[],50,false);
  expect(stale).not.toContain('data-state="reserved"');

@@ -37,7 +37,7 @@ async function api(path:string,body?:Record<string,unknown>) {
     return result;
   } finally {clearTimeout(timeout);}
 }
-function showUnlock(){data=null;lastSignature='';$('workspace').hidden=true;$('lock').hidden=true;$('pin-settings').hidden=true;$('unlock').hidden=false;$('main').replaceChildren();for(const id of ['booking-dialog','pin-dialog'])if($<HTMLDialogElement>(id).open)$<HTMLDialogElement>(id).close();if(pollTimer)clearTimeout(pollTimer);}
+function showUnlock(){data=null;lastSignature='';$('workspace').hidden=true;$('lock').hidden=true;$('pin-settings').hidden=true;$('unlock').hidden=false;$('main').replaceChildren();for(const id of ['booking-dialog','pin-dialog','history-dialog'])if($<HTMLDialogElement>(id).open)$<HTMLDialogElement>(id).close();if(pollTimer)clearTimeout(pollTimer);}
 $<HTMLFormElement>('unlock-form').onsubmit=async event=>{
   event.preventDefault();const form=event.currentTarget as HTMLFormElement,button=form.querySelector('button')!;button.disabled=true;$('unlock-error').textContent='';
   try{await api('unlock',{key:(new FormData(form).get('key')??'').toString()});form.reset();await refresh();}catch(error){$('unlock-error').textContent=message(error);}finally{button.disabled=false;}
@@ -60,7 +60,7 @@ async function refresh(){
   finally{loading=false;if(data)pollTimer=setTimeout(()=>void refresh(),rerun?0:Math.min(10000*2**Math.min(failures,2),40000));}
 }
 $('refresh').onclick=()=>void refresh();
-$('overview').onclick=()=>{selected='';render();};
+
 for(const id of ['filter','sort'])$(id).addEventListener('change',render);
 $('search').addEventListener('input',()=>{selected='';render();});
 function update(){
@@ -84,7 +84,7 @@ function render(){
   const resource=data.resources.find(r=>r.id===selected);if(selected&&!resource){selected='';toast('この設備の表示情報が変更されました。');}
   document.body.dataset.view=resource?'detail':'overview';
   const displayURL=new URL(location.href);if(resource)displayURL.searchParams.set('resource',resource.id);else displayURL.searchParams.delete('resource');history.replaceState(null,'',displayURL);
-  $('overview').setAttribute('aria-current',resource?'false':'page');
+
   if(resource){main.innerHTML=detail(resource);}
   else {
     const search=$<HTMLInputElement>('search').value.trim().toLocaleLowerCase(),filter=$<HTMLSelectElement>('filter').value;
@@ -99,10 +99,12 @@ function render(){
 function bookingInfo(r:Equipment,s:EquipmentState,large=false){
   const rows=s.current.length?s.current:s.next,b=rows[0];
   if(!b)return `<p class="booking-time no-booking">次の予約なし</p><p class="muted">本日の空き時間は下のスケジュールで確認できます</p>`;
-  return `<p class="purpose">${esc(b.purpose||'用途の記載なし')}</p><p class="booking-date">${s.current.length?'現在の予約':'次の予約'}${s.current.length>1?`・${s.current.length}件`:''} ／ ${esc(dateLabel(jstDate(b.start_at)))}${jstDate(b.start_at)!==jstDate(b.end_at)?' ～ '+esc(dateLabel(jstDate(b.end_at))):''}</p><p class="booking-time ${large?'large':''}">${esc(interval(b))}</p><div class="booking-person"><span>${esc(b.person)}${rows.length>1?` ほか${rows.length-1}件`:''}</span>${r.type==='quantity_resource'?`<span>${b.quantity}台${b.pool_id?'・'+esc(r.pools.find(p=>p.id===b.pool_id)?.name??''):''}</span>`:''}</div>${s.next[0]?`<p class="next-note">${s.current.length?'次回 '+esc(stamp(s.next[0].start_at))+' ／ ':''}<span data-countdown="${s.next[0].start_at}">あと${durationLabel(s.next[0].start_at-now())}</span></p>`:''}`;
+  return `<p class="purpose">${esc(b.purpose||'用途の記載なし')}</p><p class="booking-date">${s.current.length?'現在の予約':'次の予約'}${s.current.length>1?`・${s.current.length}件`:''} ／ ${esc(dateLabel(jstDate(b.start_at)))}${jstDate(b.start_at)!==jstDate(b.end_at)?' ～ '+esc(dateLabel(jstDate(b.end_at))):''}</p><p class="booking-time ${large?'large':''} ${jstDate(b.start_at)!==jstDate(b.end_at)?'cross-day':''}">${esc(interval(b))}</p><div class="booking-person"><span>${esc(b.person)}${rows.length>1?` ほか${rows.length-1}件`:''}</span>${r.type==='quantity_resource'?`<span>${b.quantity}台${b.pool_id?'・'+esc(r.pools.find(p=>p.id===b.pool_id)?.name??''):''}</span>`:''}</div>${s.next[0]&&!large?`<p class="next-note">${s.current.length?'次回 '+esc(stamp(s.next[0].start_at))+' ／ ':''}<span data-countdown="${s.next[0].start_at}">あと${durationLabel(s.next[0].start_at-now())}</span></p>`:''}`;
 }
+// 次の予約者は、状態・台数の下の専用枠で常に確認できる。
+function nextPreview(s:EquipmentState){const b=s.next[0];return `<aside class="next-preview"><h3>次の予約</h3>${b?`<p class="next-person">${esc(b.person)}${s.next.length>1?` ほか${s.next.length-1}件`:''}</p><p>${esc(stamp(b.start_at))}〜</p>`:'<p>予定なし</p>'}</aside>`;}
 function statusCircle(s:EquipmentState){const label=s.label.split('・').map(part=>`<span>${esc(part)}</span>`).join('');const shape={free:'<path d="m5 12 4 4 10-10"/>',soon:'<circle cx="12" cy="12" r="9"/><path d="M12 6v6h5"/>',booked:'<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4m8-4v4M4 10h16"/>',unavailable:'<path d="M5 12h14"/><circle cx="12" cy="12" r="9"/>',unknown:'<path d="M8 8a4 4 0 1 1 6 3.5c-2 1-2 2-2 3M12 18v1"/>'}[s.status];return `<div class="status-circle ${s.status}" aria-label="${esc(s.label)}"><svg class="status-symbol" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${shape}</svg><strong>${label}</strong>${s.status==='unknown'?'<small>最終取得時点の情報</small>':''}</div>`;}
-function quantities(r:Equipment,s:EquipmentState){return r.type==='quantity_resource'?`<div class="quantities"><strong>予約可能 ${fresh()?s.available:'—'} / ${r.capacity??'未設定'}台</strong><span>予約中 ${s.current.reduce((n,b)=>n+b.quantity,0)}台 ・ 故障点検 ${s.offline}台</span>${s.poolAvailable.map(p=>`<span>${esc(p.name)}：${fresh()?p.available:'—'}台空き</span>`).join('')}${s.current.some(b=>!b.pool_id)&&r.pools.length?'<small>場所未設定予約は各場所の空きから差し引いています</small>':''}</div>`:'';}
+function quantities(r:Equipment,s:EquipmentState){return r.type==='quantity_resource'?`<div class="quantities"><strong>予約可能 ${fresh()?s.available:'—'} / ${r.capacity??'未設定'}台</strong><span class="quantity-item">予約中 ${s.current.reduce((n,b)=>n+b.quantity,0)}台</span><span class="quantity-item">故障点検 ${s.offline}台</span>${s.poolAvailable.map(p=>`<span class="pool-free">${esc(p.name)}：${fresh()?p.available:'—'}台空き</span>`).join('')}${s.current.some(b=>!b.pool_id)&&r.pools.length?'<small>場所未設定予約は各場所の空きから差し引いています</small>':''}</div>`:'';}
 function card(r:Equipment){const s=state(r);return `<article class="equipment-card ${s.status}"><header><h3>${esc(r.name)}</h3></header><div class="card-body"><div class="card-status">${statusCircle(s)}</div><div class="card-booking">${bookingInfo(r,s)}</div></div>${quantities(r,s)}<div class="card-actions">${actionButton('大きく表示・詳細','detail',r.id)}${actionButton('予約する','create',r.id,!fresh()||!r.enabled||r.capacity===null,'primary')}</div>${timeline(r,selectedDate,true)}</article>`;}
 function timeline(r:Equipment,date:string,compact=false){
   const start=midnight(date),end=start+DAY,rows=data!.reservations.filter(b=>b.resource_id===r.id&&b.start_at<end&&b.end_at>start),stops=data!.maintenance.filter(m=>m.resource_id===r.id&&m.start_at<end&&(m.end_at===null||m.end_at>start));
@@ -114,7 +116,7 @@ function timeline(r:Equipment,date:string,compact=false){
   return `<div class="schedule ${compact?'compact':''}"><div class="schedule-heading"><strong>${esc(dateLabel(date))}</strong><span>本日の予約 ${rows.length}件</span></div><div class="timeline-scroll"><div class="timeline"><div class="time-ruler">${Array.from({length:13},(_,i)=>`<span style="left:${i/12*100}%">${String(i*2).padStart(2,'0')}</span>`).join('')}</div><div class="timeline-tracks">${blocks||'<div class="timeline-lane empty-lane">予約なし</div>'}${stops.map(m=>`<div class="timeline-lane"><span class="maintenance-block" style="left:${pos(m.start_at)}%;width:${Math.max(.35,pos(m.end_at??end)-pos(m.start_at))}%" title="${esc(m.reason)}">故障・点検</span></div>`).join('')}${now()>=start&&now()<end?`<span class="now-line" style="left:${pos(now())}%" aria-label="現在時刻"></span>`:''}</div></div></div></div>`;
 }
 function quantityTimeline(r:Equipment,date:string,start:number,end:number,pos:(n:number)=>number){
-  const groups=[{id:undefined,name:'全体',capacity:r.capacity??0},...r.pools];
+  const groups=r.pools.length?r.pools:[{id:undefined,name:'予約台数',capacity:r.capacity??0}];
   return `<div class="schedule quantity-schedule"><div class="schedule-heading"><strong>${esc(dateLabel(date))}の予約台数</strong><span>数字は予約中の台数 ／ 各区間をタップで詳細</span></div><div class="usage-axis"><span>場所</span><div class="time-ruler">${Array.from({length:13},(_,i)=>`<span style="left:${i/12*100}%">${String(i*2).padStart(2,'0')}</span>`).join('')}</div></div><div class="usage-rows">${groups.map(group=>`<div class="usage-row"><strong>${esc(group.name)}<small>${group.capacity}台</small></strong><div class="usage-track">${occupancySegments(r,data!.reservations,data!.maintenance,start,end,group.id).map(s=>{
     const endTime=s.end===end?'24:00':time(s.end);const label=`${group.name} ${time(s.start)}～${endTime}：予約中${s.booked}台${s.unknown?'・場所未設定'+s.unknown+'台':''}・故障点検${s.offline}台・予約可能${s.free}台`;
     return `<button class="usage-block ${s.booked?'reserved':s.offline||s.unknown?'uncertain':'available'}" data-command="usage-info" data-label="${esc(label)}" aria-label="${esc(label)}" style="left:${pos(s.start)}%;width:${Math.max(.1,pos(s.end)-pos(s.start))}%"><span>${s.booked}台${s.unknown?'＋?':''}</span></button>`;
@@ -124,7 +126,7 @@ function detail(r:Equipment){
   const s=state(r),start=midnight(selectedDate),end=start+DAY,rows=data!.reservations.filter(b=>b.resource_id===r.id&&b.start_at<end&&b.end_at>start);
   const gaps=availability(r,data!.reservations,data!.maintenance,start,end).filter(g=>g.quantity>0);
   const stops=data!.maintenance.filter(m=>m.resource_id===r.id&&m.start_at<end&&(m.end_at===null||m.end_at>start));
-  return `<section class="equipment-detail ${s.status} ${r.pools.length?'has-stirrers':''}"><div class="equipment-title"><button class="back-button" data-command="overview">設備一覧</button><div><span class="room">${esc(r.room)}</span><h2>${esc(r.name)}</h2></div><span>予約状態</span></div><div class="display-board"><div class="display-status">${statusCircle(s)}${quantities(r,s)}</div><div class="display-reservation">${bookingInfo(r,s,true)}<div class="display-actions">${actionButton('今すぐ予約','now',r.id,!fresh()||!r.enabled||r.capacity===null,'primary')}${actionButton('日時を指定して予約','create',r.id,!fresh()||!r.enabled||r.capacity===null)}</div></div>${r.pools.length?stirrerIllustration(r,data!.reservations,data!.maintenance,now(),fresh()):''}</div><div class="date-navigation"><button data-day="-1" aria-label="前日の予約">前日</button><label>表示日<input id="schedule-date" type="date" value="${selectedDate}"></label><button data-day="1" aria-label="翌日の予約">翌日</button><button data-day="today">今日</button></div>${timeline(r,selectedDate)}<div class="detail-columns"><section><h3>${esc(dateLabel(selectedDate))}の予約</h3>${rows.length?rows.map(b=>bookingRow(r,b)).join(''):'<p class="empty">この日の予約はありません</p>'}${stops.map(m=>`<p class="maintenance-note">故障・点検：${esc(m.reason)}<br>${esc(stamp(m.start_at))} ～ ${m.end_at===null?'復旧まで':esc(stamp(m.end_at))}${m.quantity?`・${m.quantity}台`:''}</p>`).join('')}</section><section><h3>空き時間${r.type==='quantity_resource'?'・予約可能台数':''}</h3>${fresh()?gaps.length?gaps.map(g=>`<p class="gap"><span>${time(g.start)} ～ ${g.end===end?'24:00':time(g.end)}</span><strong>${r.type==='quantity_resource'?g.quantity+'台':'空き'}</strong></p>`).join(''):'<p class="empty">予約できる時間帯はありません</p>':'<p class="empty">再接続後に確認できます</p>'}<p class="muted">${r.pools.length?'台数は全体の空きです。場所別の上限は予約時に確認します。':'確定時に最新の空きを再確認します。'}</p><p class="muted">翌日以降は上の日付で確認できます。</p></section></div></section>`;
+  return `<section class="equipment-detail ${s.status} ${r.pools.length?'has-stirrers':''}"><div class="equipment-title"><div><span class="room">${esc(r.room)}</span><h2>${esc(r.name)}</h2></div><span>予約状態</span></div><div class="display-board"><div class="display-status">${statusCircle(s)}${quantities(r,s)}${nextPreview(s)}</div><div class="display-reservation">${bookingInfo(r,s,true)}<div class="display-actions">${actionButton('今すぐ予約','now',r.id,!fresh()||!r.enabled||r.capacity===null,'primary')}${actionButton('日時を指定して予約','create',r.id,!fresh()||!r.enabled||r.capacity===null)}</div></div>${r.pools.length?stirrerIllustration(r,data!.reservations,data!.maintenance,now(),fresh()):''}</div><div class="date-navigation"><button data-day="-1" aria-label="前日の予約">前日</button><label>表示日<input id="schedule-date" type="date" value="${selectedDate}"></label><button data-day="1" aria-label="翌日の予約">翌日</button><button data-day="today">今日</button><button data-command="history" data-id="${esc(r.id)}">過去の履歴</button></div>${timeline(r,selectedDate)}<div class="detail-columns"><section><h3>${esc(dateLabel(selectedDate))}の予約</h3>${rows.length?rows.map(b=>bookingRow(r,b)).join(''):'<p class="empty">この日の予約はありません</p>'}${stops.map(m=>`<p class="maintenance-note">故障・点検：${esc(m.reason)}<br>${esc(stamp(m.start_at))} ～ ${m.end_at===null?'復旧まで':esc(stamp(m.end_at))}${m.quantity?`・${m.quantity}台`:''}</p>`).join('')}</section><section><h3>空き時間${r.type==='quantity_resource'?'・予約可能台数':''}</h3>${fresh()?gaps.length?gaps.map(g=>`<p class="gap"><span>${time(g.start)} ～ ${g.end===end?'24:00':time(g.end)}</span><strong>${r.type==='quantity_resource'?g.quantity+'台':'空き'}</strong></p>`).join(''):'<p class="empty">予約できる時間帯はありません</p>':'<p class="empty">再接続後に確認できます</p>'}<p class="muted">${r.pools.length?'台数は全体の空きです。場所別の上限は予約時に確認します。':'確定時に最新の空きを再確認します。'}</p><p class="muted">翌日以降は上の日付で確認できます。</p></section></div></section>`;
 }
 function bookingRow(r:Equipment,b:BookingView){const active=b.start_at<now()&&now()<b.end_at;return `<article class="booking-row" id="booking-${esc(b.id)}"><div><strong>${esc(interval(b))}</strong><span>${esc(b.person)}${r.type==='quantity_resource'?'・'+b.quantity+'台':''}${b.pool_id?'・'+esc(r.pools.find(p=>p.id===b.pool_id)?.name??''):''}</span><p>${esc(b.purpose||'用途の記載なし')}</p></div>${b.end_at>now()?`<div class="row-actions">${actionButton('変更','edit',b.id,!fresh())}${actionButton('キャンセル','cancel',b.id,!fresh())}${active?actionButton('今すぐ終了','finish',b.id,!fresh())+actionButton('30分延長','extend',b.id,!fresh()):''}</div>`:'<span class="ended">終了</span>'}</article>`;}
 document.addEventListener('click',event=>{
@@ -132,6 +134,7 @@ document.addEventListener('click',event=>{
   if(target.hasAttribute('data-close')){if(!busy)$<HTMLDialogElement>('booking-dialog').close();return;}
   if(target.dataset.day){selectedDate=target.dataset.day==='today'?jstDate(now()):jstDate(midnight(selectedDate)+Number(target.dataset.day)*DAY);void refresh();return;}
   const command=target.dataset.command,id=target.dataset.id!;if(!data)return;
+  if(command==='history'){void openHistory(id);return;}
   if(command==='usage-info'){toast(target.dataset.label!);return;}
   if(command==='overview'){selected='';render();$('main').focus();return;}
   if(command==='detail'){selected=id;render();$('main').focus();return;}
@@ -224,3 +227,34 @@ $<HTMLInputElement>('qr-file').onchange=async event=>{
 // QRの秘密値はURLフラグメントだけに入れる。サーバーへ送らず、読み込み直後に履歴から除く。
 let initialQR=location.hash.startsWith('#device=')?location.href:'';
 if(initialQR){const url=new URL(location.href);url.hash='';history.replaceState(null,'',url);const value=initialQR;initialQR='';void connectQR(value);}else void refresh();
+
+
+
+// 履歴は端末認証済みの閲覧専用APIから取得する。PINやSlackの内部IDは取得しない。
+const historyDialog=$<HTMLDialogElement>('history-dialog'),historyForm=$<HTMLFormElement>('history-form');
+let historyResource:Equipment|null=null,historyCursor:{end:number;id:string}|null=null,historySequence=0;
+async function openHistory(id:string){
+ historyResource=data?.resources.find(r=>r.id===id)??null;if(!historyResource)return;
+ $('history-equipment').textContent=historyResource.name;
+ (historyForm.elements.namedItem('from') as HTMLInputElement).value=jstDate(now()-30*DAY);
+ (historyForm.elements.namedItem('to') as HTMLInputElement).value=jstDate(now());
+ historyDialog.showModal();await loadHistory(true);
+}
+async function loadHistory(reset:boolean){
+ if(!historyResource)return;const sequence=++historySequence,values=new FormData(historyForm);
+ const params=new URLSearchParams({resource:historyResource.id,from:String(values.get('from')),to:String(values.get('to'))});
+ if(!reset&&historyCursor){params.set('before',String(historyCursor.end));params.set('before_id',historyCursor.id);}
+ if(reset){historyCursor=null;$('history-list').replaceChildren();}
+ $('history-more').hidden=true;$('history-message').textContent='履歴を取得しています…';
+ try {
+  const result=await api('history?'+params) as {bookings:BookingView[];next:{end:number;id:string}|null};
+  if(sequence!==historySequence||!historyDialog.open)return;
+  $('history-list').insertAdjacentHTML('beforeend',result.bookings.map(b=>`<article class="history-row"><strong>${esc(stamp(b.start_at))} 〜 ${esc(stamp(b.end_at))}</strong><p>${esc(b.person)}${historyResource!.type==='quantity_resource'?'・'+b.quantity+'台':''}${b.pool_id?'・'+esc(historyResource!.pools.find(p=>p.id===b.pool_id)?.name??'場所未設定'):''}</p><p>${esc(b.purpose||'用途の記載なし')}</p></article>`).join(''));
+  historyCursor=result.next;$('history-more').hidden=!historyCursor;
+  $('history-message').textContent=$('history-list').children.length?`${$('history-list').children.length}件を表示${historyCursor?'（続きがあります）':''}`:'この期間の履歴はありません。';
+ }catch(error){if(sequence===historySequence&&historyDialog.open){$('history-message').textContent=message(error);$('history-more').hidden=!historyCursor;}}
+}
+$('history-close').onclick=()=>historyDialog.close();
+historyDialog.addEventListener('close',()=>{historySequence++;historyResource=null;historyCursor=null;$('history-list').replaceChildren();});
+historyForm.onsubmit=event=>{event.preventDefault();void loadHistory(true);};
+$('history-more').onclick=()=>void loadHistory(false);
