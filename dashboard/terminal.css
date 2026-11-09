@@ -144,7 +144,8 @@ button.primary{background:linear-gradient(#dc2779,#c0004b);border-color:#bc064c;
 /* 液晶パネル型の外観。表示器には温度・回転数の架空の実測値を描かない。 */
 .stirrer-set,body[data-view=detail] .stirrer-set{position:relative;aspect-ratio:160/150;padding:0;gap:0;background:transparent;border:0;box-shadow:none;border-radius:0}
 .stirrer-case{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
-.stirrer-plates{position:absolute;left:20%;top:12%;width:74%;height:58%;transform:skewX(-18deg) rotate(11deg);gap:3px;align-content:stretch}
+.stirrer-plates{position:absolute;left:20%;top:12%;width:68%;height:58%;grid-template-rows:repeat(2,minmax(0,1fr));transform:skewX(-18deg) rotate(11deg);gap:3px;align-content:stretch}
+.stirrer-set .stirrer-unit,body[data-view=detail] .stirrer-set .stirrer-unit{height:100%;min-height:0;aspect-ratio:auto}
 .stirrer-unit .hotplate{fill:#e0e3e6}.stirrer-unit .plate-edge{fill:#8e949b;stroke:#c2c7cc}.stirrer-unit .plate-status{opacity:.08}
 .stirrer-controls{position:absolute;left:17%;bottom:16%;width:61%;height:16%;display:grid;grid-template-columns:1fr 24%;align-items:center;gap:3px;padding:1px;transform:rotate(12deg);border:0;border-radius:0}
 .stirrer-screen{height:85%;display:flex;align-items:center;justify-content:space-evenly;background:#69758a;border:1px solid #a0a9b6;border-radius:1px}.stirrer-screen i{width:20%;height:2px;background:#eef4fa;border:0;border-radius:0;transform:skewX(-10deg)}.stirrer-keys{display:grid;grid-template-columns:1fr 1fr;gap:1px}.stirrer-keys i{width:3px;height:3px;background:#1e799c;border-color:#b5c1ca}.stirrer-keys i:last-child{background:#679b39}
