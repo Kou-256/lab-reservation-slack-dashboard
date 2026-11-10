@@ -7,7 +7,7 @@ import {dateFields,selectedDateTime} from './date-fields.js';
 import {bookingPeriod} from './booking-period.js';
 import {bookingStamp} from '../shared/booking-format.js';
 import {parseResourceOrder,orderedResources} from '../shared/resource-order.js';
-import {calendarView,calendarDetail} from './calendar.js';
+import {calendarView,calendarDetail,calendarDayDetail,calendarUpcoming} from './calendar.js';
 import type {CalendarData} from '../shared/calendar.js';
 
 const $=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById(id) as T;
@@ -22,6 +22,7 @@ let displayMode=['calendar','gantt'].includes(new URL(location.href).searchParam
 let pollTimer:ReturnType<typeof setTimeout>|undefined,lastSignature='',lastRender='',busy=false;
 let pending:{action:string;resource:Equipment;row?:BookingView;minutes?:number;requestId:string;wire?:Record<string,unknown>;confirmed:boolean}|null=null;
 let wake:WakeLockSentinel|null=null;
+let calendarWeekStart:0|1=preferences('lab-calendar-week-start')==='0'?0:1;
 let calendarState:CalendarData|null=null,calendarMonth=jstDate(Date.now()).slice(0,7),calendarDay=jstDate(Date.now()),calendarReceived=0,calendarWall=0,calendarLoading=false,calendarError='',calendarRequest=0,calendarSignature='';
 const calendarEquipment=new Set(parseResourceOrder(preferences('lab-calendar-equipment'))),calendarHiddenEvents=new Set(parseResourceOrder(preferences('lab-calendar-hidden-events')));
 const calendarFresh=()=>Boolean(calendarState&&calendarState.month===calendarMonth&&Math.max(performance.now()-calendarReceived,Date.now()-calendarWall)<=30000);
@@ -109,7 +110,7 @@ function render(){
   const displayURL=new URL(location.href);if(resource)displayURL.searchParams.set('resource',resource.id);else displayURL.searchParams.delete('resource');if(!resource&&['gantt','calendar'].includes(displayMode))displayURL.searchParams.set('view',displayMode);else displayURL.searchParams.delete('view');history.replaceState(null,'',displayURL);
 
   if(resource){main.innerHTML=detail(resource);}
-  else if(displayMode==='calendar'){main.innerHTML=calendarView(calendarState,calendarMonth,calendarDay,visibleCalendarResources(),now(),calendarFresh(),calendarError);}
+  else if(displayMode==='calendar'){main.innerHTML=calendarView(calendarState,calendarMonth,calendarDay,visibleCalendarResources(),now(),calendarFresh(),calendarError,calendarWeekStart);}
   else {
     const search=$<HTMLInputElement>('search').value.trim().toLocaleLowerCase(),filter=$<HTMLSelectElement>('filter').value;
     let resources=data.resources.filter(r=>(r.name+' '+r.room).toLocaleLowerCase().includes(search)).filter(r=>{const s=state(r);return filter==='all'||filter==='free'&&s.available>0&&s.status!=='unavailable'&&s.status!=='unknown'||filter===s.status;});
@@ -121,6 +122,7 @@ function render(){
     else main.innerHTML=`<div class="list-heading"><h2>設備の予約状況</h2><span>設備を選ぶと大きく表示できます</span></div><div class="equipment-grid">${resources.map(card).join('')}</div>${resources.length?'':'<p class="empty">該当する設備はありません。絞り込みを変更してください。</p>'}`;
   }
   if(focus)main.querySelectorAll<HTMLElement>('[data-command]').forEach(el=>{if(el.dataset.command===focus.command&&el.dataset.id===focus.id)el.focus({preventScroll:true});});
+  const weekSelect=main.querySelector<HTMLSelectElement>('#calendar-week-start');if(weekSelect)weekSelect.value=String(calendarWeekStart);
   const nextEquipment=main.querySelector<HTMLDetailsElement>('.calendar-equipment');if(nextEquipment){nextEquipment.open=equipmentOpen;const list=nextEquipment.querySelector<HTMLElement>(':scope > div');if(list)list.scrollTop=equipmentScroll;}
   const nextScroll=main.querySelector<HTMLElement>('.gantt-scroll');if(nextScroll){nextScroll.scrollTop=chartScroll.top;nextScroll.scrollLeft=chartScroll.left;}
 }
@@ -337,15 +339,19 @@ async function refreshCalendar(){
 function calendarCommand(command:string,target:HTMLElement){
  if(command==='calendar-info'){
   const item=[...(calendarState?.items??[]),...(calendarState?.upcoming??[])].find(i=>i.id===target.dataset.id),resource=calendarState?.resources.find(r=>r.id===item?.resource_id);if(!item||!resource)return;
-  $('gantt-dialog-title').textContent='予定の詳細';$('gantt-info').innerHTML=calendarDetail(item,resource);$('gantt-detail').hidden=true;$<HTMLDialogElement>('gantt-dialog').showModal();return;
+  $('gantt-dialog-title').textContent='予定の詳細';$('gantt-info').innerHTML=calendarDetail(item,resource);$('gantt-detail').hidden=true;if(!$<HTMLDialogElement>('gantt-dialog').open)$<HTMLDialogElement>('gantt-dialog').showModal();return;
  }
- if(command==='calendar-day'){calendarDay=target.dataset.date!;render();const agenda=document.querySelector<HTMLElement>('.calendar-agenda'),section=agenda?.querySelector<HTMLElement>('.calendar-selected-day');if(agenda&&section){if(innerWidth>750)agenda.scrollTop=section.offsetTop;else section.scrollIntoView({block:'nearest'});}return;}
+ if(command==='calendar-day'||command==='calendar-upcoming'){
+  if(!calendarState)return;if(command==='calendar-day')calendarDay=target.dataset.date!;
+  $('gantt-dialog-title').textContent=command==='calendar-day'?'日別の予定':'次の開催予定';$('gantt-info').innerHTML=command==='calendar-day'?calendarDayDetail(calendarState,calendarDay,visibleCalendarResources()):calendarUpcoming(calendarState,visibleCalendarResources(),now());$('gantt-detail').hidden=true;$<HTMLDialogElement>('gantt-dialog').showModal();return;
+ }
  if(command==='calendar-retry'){void refreshCalendar();return;}
  if(command==='calendar-today'){calendarMonth=jstDate(now()).slice(0,7);calendarDay=jstDate(now());}
  else {const [year,month]=calendarMonth.split('-').map(Number);calendarMonth=new Date(Date.UTC(year,month-1+(command==='calendar-prev'?-1:1),1)).toISOString().slice(0,7);calendarDay=calendarMonth+'-01';}
  render();void refreshCalendar();
 }
 function calendarChange(target:HTMLInputElement){
+ if(target.id==='calendar-week-start'){calendarWeekStart=target.value==='0'?0:1;preferences('lab-calendar-week-start',String(calendarWeekStart));render();return;}
  if(target.id==='calendar-year'||target.id==='calendar-month'){calendarMonth=$<HTMLSelectElement>('calendar-year').value+'-'+$<HTMLSelectElement>('calendar-month').value.padStart(2,'0');calendarDay=calendarMonth+'-01';render();void refreshCalendar();return;}
  if(target.id==='calendar-all-equipment'){calendarEquipment.clear();if(target.checked)for(const r of calendarState?.resources??[])if(r.kind==='equipment')calendarEquipment.add(r.id);}
  else {const r=calendarState?.resources.find(r=>r.id===target.dataset.calendarResource);if(!r)return;const set=r.kind==='equipment'?calendarEquipment:calendarHiddenEvents;if(r.kind==='equipment'){if(target.checked)set.add(r.id);else set.delete(r.id);}else{if(target.checked)set.delete(r.id);else set.add(r.id);}}

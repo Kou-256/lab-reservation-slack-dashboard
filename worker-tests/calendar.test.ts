@@ -1,7 +1,7 @@
 import {it,expect,beforeAll,afterAll} from 'vitest';
 import {Miniflare} from 'miniflare';
 import {calendarData} from '../src/dashboard/calendar';
-import {calendarRange,itemsOnDate} from '../shared/calendar';
+import {calendarRange,calendarWeek,itemsOnDate} from '../shared/calendar';
 import {DAY,midnight} from '../shared/dashboard';
 let mf:Miniflare,db:D1Database;const now=midnight('2030-01-01')+12*3600000;
 beforeAll(async()=>{
@@ -34,4 +34,14 @@ it('uses a Monday-first JST grid and half-open cross-day reservations',()=>{
 it('rejects invalid month ranges without guessing recurring events',async()=>{
  for(const month of ['2030-13','2030-00','bad','2201-01'])await expect(calendarData(db,month,now)).rejects.toThrow();
  const result=await calendarData(db,'2030-02',now);expect(result.items).toEqual([]);expect(result.upcoming.length).toBeGreaterThan(0);
+});
+
+it('fits actual month weeks with either weekday origin and retains leap days',()=>{
+ for(let year=2025;year<2033;year++)for(let month=1;month<=12;month++)for(const first of [0,1] as const){const key=year+'-'+String(month).padStart(2,'0'),range=calendarRange(key,first,true);expect(new Date(range.start+9*3600000).getUTCDay()).toBe(first);expect([28,35,42]).toContain((range.end-range.start)/DAY);const last=Date.UTC(year,month,0)-9*3600000;expect(range.start).toBeLessThanOrEqual(midnight(key+'-01'));expect(range.end).toBeGreaterThan(last);}
+});
+it('splits long reservations at week boundaries without hiding colliding one-day events',()=>{
+ const start=midnight('2030-01-07'),base={id:'long',resource_id:'device',title:'装置',description:'',person:'利用者',date:'2030-01-06',start_at:start-DAY,end_at:start+9*DAY,quantity:1,location:'',pool_id:null,not_held:false};
+ const sameDay={...base,id:'one',start_at:start+3600000,end_at:start+7200000};const first=calendarWeek([base,sameDay],start);expect(first.segments).toHaveLength(2);expect(first.segments[0]).toMatchObject({column:0,span:7,continuesBefore:true,continuesAfter:true});expect(first.segments[1].lane).not.toBe(first.segments[0].lane);
+ expect(calendarWeek([base],start+7*DAY).segments[0]).toMatchObject({column:0,span:2,continuesBefore:true,continuesAfter:false});expect(calendarWeek([{...base,start_at:start,end_at:start+DAY}],start).segments[0].span).toBe(1);expect(calendarWeek([{...base,start_at:start-DAY,end_at:start}],start).segments).toEqual([]);
+ const crowded=Array.from({length:18},(_,i)=>({...sameDay,id:String(i)}));expect(calendarWeek(crowded,start).segments).toHaveLength(18);expect(calendarWeek(crowded,start).lanes).toBe(18);
 });

@@ -217,3 +217,53 @@ body[data-view=gantt][data-gantt-filters=false] .toolbar{display:none}
 
 /* 小さな月セルでも予定名を押しつぶさず、残りは件数と日別一覧で確認する。 */
 .calendar-day{gap:2px;padding:4px}.calendar-day-number,.calendar-cell-item,.calendar-day>small{flex-shrink:0}
+
+/* 月全体を1画面に置き、予定は週の共通レーンに全件配置する。 */
+body[data-view=calendar]{height:100dvh;overflow:hidden;display:flex;flex-direction:column}
+body[data-view=calendar] .app-header{flex:0 0 48px;min-height:48px;height:48px;padding:2px 12px}
+body[data-view=calendar] #workspace{flex:1;min-height:0;display:flex;flex-direction:column;width:100%;max-width:none;padding:0 8px 8px}
+body[data-view=calendar] #workspace[hidden]{display:none}
+body[data-view=calendar] .summary{flex:0 0 36px;min-height:36px;height:36px;padding:0}
+body[data-view=calendar] .toolbar,body[data-view=calendar] footer{display:none}
+body[data-view=calendar] #main{flex:1;min-height:0;display:flex}
+.lab-calendar{display:flex;flex-direction:column;min-height:0;height:100%;padding:8px;border-radius:4px}
+.calendar-heading{flex:none;flex-direction:row;align-items:center;margin:0 0 4px;gap:8px}
+.calendar-heading h2{font-size:24px;white-space:nowrap;margin:0}
+.calendar-navigation{gap:4px;align-items:center;flex-wrap:nowrap}
+.calendar-navigation select,.calendar-navigation button{min-height:40px;height:40px;padding:4px 12px;font-size:16px}
+.calendar-settings{position:relative;flex:none}
+.calendar-settings summary{cursor:pointer;font-size:13px;min-height:40px;padding:12px 8px}
+.calendar-settings>div{position:absolute;right:0;top:100%;width:200px;padding:16px;background:var(--surface);border:1px solid var(--line);z-index:20;box-shadow:0 4px 16px #0002}
+.calendar-settings label{font-size:14px}
+.calendar-filters{flex:none;margin:0 0 4px;gap:8px;flex-direction:row;align-items:center;position:relative}
+.calendar-filters fieldset{display:flex;flex-wrap:wrap;gap:4px}
+.calendar-filters fieldset .calendar-toggle{margin:0}
+.calendar-toggle{min-height:36px;padding:4px 8px;font-size:14px;gap:4px}
+.calendar-toggle input{width:20px;height:20px;min-height:20px}
+.calendar-equipment{min-width:0;max-width:none;position:relative;width:auto}
+.calendar-equipment summary{min-height:36px;padding:8px;font-size:13px}
+.calendar-equipment[open]{position:absolute;right:0;top:0;width:min(540px,100%);padding:8px;background:var(--surface);border:1px solid var(--line);z-index:15;box-shadow:0 4px 16px #0002}
+.calendar-equipment>div{max-height:none;overflow:visible}
+.calendar-month{display:flex;flex-direction:column;flex:1;min-height:0}
+.calendar-weekdays{flex:0 0 24px}.calendar-weekdays span{font-size:14px;padding:0;line-height:24px}
+.calendar-weeks{flex:1;min-height:0;display:flex;flex-direction:column;border-left:1px solid var(--line)}
+.calendar-week{position:relative;min-height:0;border-bottom:1px solid var(--line)}
+.calendar-days{position:absolute;inset:0;display:grid;grid-template-columns:repeat(7,minmax(0,1fr))}
+.calendar-day{height:100%;min-height:0;padding:0;border-top:0;border-bottom:0;background:var(--surface);display:block;text-align:left;overflow:hidden;position:relative}
+.calendar-day>span{position:absolute;top:2px;left:8px;right:4px;font-size:17px;line-height:24px;display:flex;gap:4px;align-items:center}
+.calendar-day small{font-size:11px}.calendar-day.today>span{color:var(--blue);font-weight:700}
+.calendar-bars{position:absolute;inset:28px 2px 3px 2px;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:2px;pointer-events:none}
+.calendar-event{pointer-events:auto;min-height:0;height:auto;width:auto;min-width:0;padding:0 4px;margin:0 1px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;text-align:left;font-size:clamp(11px,1.15vw,18px);font-weight:500;line-height:1.3;border:0;border-left:3px solid #3d6b9e;border-radius:3px;background:#dce9f6;color:#15395d;align-self:stretch}
+.calendar-event.equipment{border-color:#277268;background:#d5eee8;color:#164c42}
+.calendar-event.multi-day{border-left:0;background:#c8dfd9;border-radius:4px;color:#154a40}
+.calendar-event.multi-day.event{background:#d1dff1;color:#173957}
+.calendar-event.continues-before{border-top-left-radius:0;border-bottom-left-radius:0}.calendar-event.continues-after{border-top-right-radius:0;border-bottom-right-radius:0}
+.calendar-event.not-held{background:var(--soft);color:var(--muted)}
+:root[data-theme=dark] .calendar-event{background:#24496b;color:#e6f1ff}:root[data-theme=dark] .calendar-event.equipment{background:#21564e;color:#e0fff6}
+.calendar-notice{flex:none;margin:0;padding:4px 8px;font-size:13px}
+@media(max-width:1100px){body[data-view=calendar] .header-right time{display:none}.calendar-navigation button,.calendar-navigation select{padding:4px 8px;font-size:14px}.calendar-heading h2{font-size:22px}}
+@media(max-width:750px){body[data-view=calendar] .app-header h1{font-size:14px}body[data-view=calendar] .header-actions{display:none}body[data-view=calendar] .summary{font-size:11px}body[data-view=calendar] .connection span{display:none}.calendar-heading{flex-wrap:wrap}.calendar-navigation{flex-wrap:wrap}.calendar-heading h2{font-size:20px}.calendar-event{font-size:10px}.calendar-day>span{left:4px;font-size:14px}.calendar-toggle{font-size:11px;padding:2px 4px}.calendar-equipment summary{font-size:11px}.calendar-filters{gap:4px}.calendar-bars{top:26px}}
+
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.calendar-navigation{flex:none}.calendar-navigation button{flex:none;white-space:nowrap;word-break:normal;width:auto}.calendar-navigation select{flex:none;min-width:80px;max-width:100px;width:auto}
+.calendar-day>span{pointer-events:none}

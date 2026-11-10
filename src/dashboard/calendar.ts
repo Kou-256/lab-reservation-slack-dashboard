@@ -7,6 +7,7 @@ type Session={id:string;resource_id:string;session_date:string;state:string;pres
 const fields='b.id,b.resource_id,b.start_at,b.end_at,b.slack_user_name,b.presenters,b.purpose,b.purpose_choice,b.event_title,b.quantity,b.location,b.pool_id,s.presenters AS session_presenters,s.state AS session_state';
 export async function calendarData(db:D1Database,month:string,now:number):Promise<CalendarData>{
  let range;try{range=calendarRange(month);}catch{throw new DashboardError('表示する年月を確認してください。');}
+ const sunday=calendarRange(month,0);range={start:Math.min(range.start,sunday.start),end:Math.max(range.end,sunday.end)};
  const today=jstDate(now),from=jstDate(range.start),to=jstDate(range.end);
  // 登録済み予約と時刻のない担当履歴を一括で読む。繰り返し予定を推測して作らない。
  const result=await db.batch([
