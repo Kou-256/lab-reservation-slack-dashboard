@@ -47,4 +47,4 @@ Slack Appはslack-http-manifest.yamlを参考に作成し、URLを自分のWorke
 
 ## ライセンス
 
-[MIT License](LICENSE)。著作権表示とライセンス文を保持すれば、商用利用・改変・再配布が可能です。無保証で提供します。依存パッケージには、それぞれのライセンスが適用されます。
+[MIT License](LICENSE)。著作権表示とライセンス文を保持すれば、商用利用・改変・再配布が可能です。無保証で提供します。依存パッケージには、それぞれのライセンスが適用されます。同梱するNoto Sans JPフォントはSIL Open Font License 1.1です。[第三者ライセンス](THIRD_PARTY_NOTICES.md)も参照してください。

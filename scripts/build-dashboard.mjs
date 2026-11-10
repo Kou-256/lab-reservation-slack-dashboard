@@ -8,5 +8,7 @@ await mkdir('dist/web/dashboard/assets',{recursive:true});
 await copyFile('dashboard/index.html','dist/web/dashboard/index.html');
 await copyFile('dashboard/style.css','dist/web/dashboard/assets/style.css');
 await copyFile('dashboard/terminal.css','dist/web/dashboard/assets/terminal.css');
+await mkdir('dist/web/dashboard/assets/fonts',{recursive:true});
+for(const name of ['noto-sans-jp-variable.woff2','OFL.txt','SOURCE.md'])await copyFile('dashboard/fonts/'+name,'dist/web/dashboard/assets/fonts/'+name);
 await build({entryPoints:['dashboard/qr-scan.ts'],bundle:true,format:'esm',minify:true,target:'es2022',outfile:'dist/web/dashboard/assets/dashboard/qr-scan.js'});
 console.log('Dashboard built: dist/web/dashboard');

@@ -110,6 +110,7 @@ describe('tablet dashboard API and shared reservation compatibility',()=>{
   });
   it('requires device authentication, validates origin and fails closed without configuration',async()=>{
     expect((await call('/dashboard/api/snapshot',undefined,{cookie:''})).status).toBe(401);
+    expect((await call('/dashboard/api/calendar?month=2030-01',undefined,{cookie:''})).status).toBe(401);
     expect((await call('/dashboard/api/history?resource=room&from=2030-01-01&to=2030-01-02',undefined,{cookie:''})).status).toBe(401);
     expect((await call('/dashboard/api/bookings',input(),{origin:'https://attacker.test'})).status).toBe(403);
     env.DASHBOARD_SECRET=undefined;expect((await call('/dashboard/api/snapshot')).status).toBe(503);

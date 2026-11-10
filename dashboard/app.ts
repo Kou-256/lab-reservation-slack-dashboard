@@ -7,6 +7,8 @@ import {dateFields,selectedDateTime} from './date-fields.js';
 import {bookingPeriod} from './booking-period.js';
 import {bookingStamp} from '../shared/booking-format.js';
 import {parseResourceOrder,orderedResources} from '../shared/resource-order.js';
+import {calendarView,calendarDetail} from './calendar.js';
+import type {CalendarData} from '../shared/calendar.js';
 
 const $=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById(id) as T;
 const esc=(value:unknown)=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
@@ -16,10 +18,13 @@ const stamp=bookingStamp;
 const interval=(b:BookingView)=>`${stamp(b.start_at)} ～ ${stamp(b.end_at)}`;
 const actionButton=(text:string,command:string,id:string,disabled=false,cls='')=>`<button class="${cls}" data-command="${command}" data-id="${esc(id)}" ${disabled?'disabled':''}>${text}</button>`;
 let data:Snapshot|null=null,selected=new URL(location.href).searchParams.get('resource')??'',selectedDate=jstDate(Date.now()),received=0,receivedWall=0,serverTime=0,loading=false,failures=0;
-let displayMode=new URL(location.href).searchParams.get('view')==='gantt'?'gantt':'cards',ganttRange:'day'|'workday'='day',ganttExpanded=false,ganttFilters=false;
+let displayMode=['calendar','gantt'].includes(new URL(location.href).searchParams.get('view')??'')?new URL(location.href).searchParams.get('view')!:'cards',ganttRange:'day'|'workday'='day',ganttExpanded=false,ganttFilters=false;
 let pollTimer:ReturnType<typeof setTimeout>|undefined,lastSignature='',lastRender='',busy=false;
 let pending:{action:string;resource:Equipment;row?:BookingView;minutes?:number;requestId:string;wire?:Record<string,unknown>;confirmed:boolean}|null=null;
 let wake:WakeLockSentinel|null=null;
+let calendarState:CalendarData|null=null,calendarMonth=jstDate(Date.now()).slice(0,7),calendarDay=jstDate(Date.now()),calendarReceived=0,calendarWall=0,calendarLoading=false,calendarError='',calendarRequest=0,calendarSignature='';
+const calendarEquipment=new Set(parseResourceOrder(preferences('lab-calendar-equipment'))),calendarHiddenEvents=new Set(parseResourceOrder(preferences('lab-calendar-hidden-events')));
+const calendarFresh=()=>Boolean(calendarState&&calendarState.month===calendarMonth&&Math.max(performance.now()-calendarReceived,Date.now()-calendarWall)<=30000);
 const elapsed=()=>Math.max(performance.now()-received,Date.now()-receivedWall,0);
 const now=()=>data?serverTime+elapsed():Date.now();
 const fresh=()=>Boolean(data&&elapsed()<=30000);
@@ -43,7 +48,7 @@ async function api(path:string,body?:Record<string,unknown>) {
     return result;
   } finally {clearTimeout(timeout);}
 }
-function showUnlock(){document.body.dataset.ganttExpanded='false';data=null;lastSignature='';$('workspace').hidden=true;$('lock').hidden=true;$('pin-settings').hidden=true;$('unlock').hidden=false;$('main').replaceChildren();for(const id of ['booking-dialog','pin-dialog','history-dialog','gantt-dialog','order-dialog'])if($<HTMLDialogElement>(id).open)$<HTMLDialogElement>(id).close();if(pollTimer)clearTimeout(pollTimer);}
+function showUnlock(){calendarState=null;calendarRequest++;calendarLoading=false;calendarSignature='';document.body.dataset.ganttExpanded='false';data=null;lastSignature='';$('workspace').hidden=true;$('lock').hidden=true;$('pin-settings').hidden=true;$('unlock').hidden=false;$('main').replaceChildren();for(const id of ['booking-dialog','pin-dialog','history-dialog','gantt-dialog','order-dialog'])if($<HTMLDialogElement>(id).open)$<HTMLDialogElement>(id).close();if(pollTimer)clearTimeout(pollTimer);}
 $<HTMLFormElement>('unlock-form').onsubmit=async event=>{
   event.preventDefault();const form=event.currentTarget as HTMLFormElement,button=form.querySelector('button')!;button.disabled=true;$('unlock-error').textContent='';
   try{await api('unlock',{key:(new FormData(form).get('key')??'').toString()});form.reset();await refresh();}catch(error){$('unlock-error').textContent=message(error);}finally{button.disabled=false;}
@@ -61,13 +66,14 @@ async function refresh(){
     data=result;serverTime=result.server_time+(performance.now()-started)/2;received=performance.now();receivedWall=Date.now();failures=0;
     $('unlock').hidden=true;$('workspace').hidden=false;$('lock').hidden=false;$('pin-settings').hidden=false;
     const signature=JSON.stringify({...result,server_time:0});
-    if(signature!==lastSignature){lastSignature=signature;render();}update();void keepAwake();
+    if(signature!==lastSignature){lastSignature=signature;render();}update();void keepAwake();if(displayMode==='calendar')void refreshCalendar();
   } catch(error){failures++;if(data){$('warning').textContent='通信が不安定です。自動で再接続します。 '+message(error);$('warning').hidden=false;update();}else $('unlock-error').textContent=message(error);}
   finally{loading=false;if(data)pollTimer=setTimeout(()=>void refresh(),rerun?0:Math.min(10000*2**Math.min(failures,2),40000));}
 }
 $('refresh').onclick=()=>void refresh();
 
 for(const id of ['filter','sort'])$(id).addEventListener('change',render);
+$('calendar-toggle').onclick=()=>{selected='';displayMode='calendar';render();void refreshCalendar();};
 $('gantt-toggle').onclick=()=>{selected='';displayMode=displayMode==='gantt'?'cards':'gantt';render();};
 if(parseResourceOrder(preferences('lab-resource-order')).length)$<HTMLSelectElement>('sort').value='custom';
 $('edit-order').onclick=()=>openOrder();
@@ -75,14 +81,14 @@ $('search').addEventListener('input',()=>{selected='';render();});
 function update(){
   $('clock').textContent=new Intl.DateTimeFormat('ja-JP',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit',weekday:'short',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(now());
   if(!data)return;
-  const states=data.resources.map(state),good=fresh();
-  $('connection').textContent=!good?'情報が古くなっています':failures?'再接続中':'接続正常';$('connection').dataset.health=good&&!failures?'ok':'error';
+  const states=data.resources.map(state),calendarPending=displayMode==='calendar'&&calendarLoading&&(!calendarState||calendarState.month!==calendarMonth),good=fresh()&&(displayMode!=='calendar'||calendarPending||calendarFresh());
+  $('connection').textContent=calendarPending?'予定取得中':!good?'情報が古くなっています':(failures||(displayMode==='calendar'&&calendarError))?'再接続中':'接続正常';$('connection').dataset.health=good&&!failures?'ok':'error';
   if($('gantt-clock'))$('gantt-clock').textContent=time(now());if($('gantt-health'))$('gantt-health').textContent=$('connection').textContent;
   $('updated').textContent=`最終取得 ${time(serverTime)}:${new Date(serverTime).getUTCSeconds().toString().padStart(2,'0')}（${Math.floor(elapsed()/1000)}秒前）`;
   $('counts').innerHTML=`<span>登録設備 <b>${data.resources.length}</b></span><span>空きあり <b>${good?states.filter(s=>s.status!=='unavailable'&&s.available>0).length:'—'}</b></span><span>予約時間中 <b>${good?states.filter(s=>s.current.length).length:'—'}</b></span>`;
   if(!good){$('warning').textContent='最新の予約状態を確認できません。前回取得した情報を参考表示しています。予約操作は再接続後に行ってください。';$('warning').hidden=false;}
   else if(!failures)$('warning').hidden=true;
-  const signature=JSON.stringify(states.map(s=>[s.status,s.current.map(b=>b.id),s.next.map(b=>b.id),s.available,s.offline]));
+  const signature=JSON.stringify([states.map(s=>[s.status,s.current.map(b=>b.id),s.next.map(b=>b.id),s.available,s.offline]),displayMode==='calendar'?[calendarFresh(),calendarPending,calendarError]:null]);
   if(signature!==lastRender){lastRender=signature;render();}
   document.querySelectorAll<HTMLElement>('[data-countdown]').forEach(el=>{const delta=Number(el.dataset.countdown)-now();el.textContent=delta>0?`あと${durationLabel(delta)}`:'開始時刻です';});
   // 日付が変わったら当日表示を追従する。閲覧中の過去・未来日は勝手に切り替えない。
@@ -90,17 +96,20 @@ function update(){
 }
 function render(){
   if(!data)return;
+  const previousEquipment=document.querySelector<HTMLDetailsElement>('.calendar-equipment'),equipmentOpen=previousEquipment?.open??false,equipmentScroll=previousEquipment?.querySelector<HTMLElement>(':scope > div')?.scrollTop??0;
   const previousScroll=document.querySelector<HTMLElement>('.gantt-scroll');
   const chartScroll={top:previousScroll?.scrollTop??0,left:previousScroll?.scrollLeft??0};
   const main=$('main'),active=document.activeElement as HTMLElement|null,focus=active?.dataset.command&&{command:active.dataset.command,id:active.dataset.id};
   const resource=data.resources.find(r=>r.id===selected);if(selected&&!resource){selected='';toast('この設備の表示情報が変更されました。');}
-  document.body.dataset.view=resource?'detail':displayMode==='gantt'?'gantt':'overview';
+  document.body.dataset.view=resource?'detail':displayMode==='gantt'?'gantt':displayMode==='calendar'?'calendar':'overview';
   document.body.dataset.ganttExpanded=String(!resource&&displayMode==='gantt'&&ganttExpanded);document.body.dataset.ganttFilters=String(ganttFilters);
+  $('calendar-toggle').setAttribute('aria-pressed',String(!resource&&displayMode==='calendar'));
   $('gantt-toggle').textContent=displayMode==='gantt'&&!resource?'カード表示':'全体スケジュール';$('gantt-toggle').setAttribute('aria-pressed',String(displayMode==='gantt'&&!resource));
   if($<HTMLDialogElement>('gantt-dialog').open)$<HTMLDialogElement>('gantt-dialog').close();
-  const displayURL=new URL(location.href);if(resource)displayURL.searchParams.set('resource',resource.id);else displayURL.searchParams.delete('resource');if(!resource&&displayMode==='gantt')displayURL.searchParams.set('view','gantt');else displayURL.searchParams.delete('view');history.replaceState(null,'',displayURL);
+  const displayURL=new URL(location.href);if(resource)displayURL.searchParams.set('resource',resource.id);else displayURL.searchParams.delete('resource');if(!resource&&['gantt','calendar'].includes(displayMode))displayURL.searchParams.set('view',displayMode);else displayURL.searchParams.delete('view');history.replaceState(null,'',displayURL);
 
   if(resource){main.innerHTML=detail(resource);}
+  else if(displayMode==='calendar'){main.innerHTML=calendarView(calendarState,calendarMonth,calendarDay,visibleCalendarResources(),now(),calendarFresh(),calendarError);}
   else {
     const search=$<HTMLInputElement>('search').value.trim().toLocaleLowerCase(),filter=$<HTMLSelectElement>('filter').value;
     let resources=data.resources.filter(r=>(r.name+' '+r.room).toLocaleLowerCase().includes(search)).filter(r=>{const s=state(r);return filter==='all'||filter==='free'&&s.available>0&&s.status!=='unavailable'&&s.status!=='unknown'||filter===s.status;});
@@ -112,6 +121,7 @@ function render(){
     else main.innerHTML=`<div class="list-heading"><h2>設備の予約状況</h2><span>設備を選ぶと大きく表示できます</span></div><div class="equipment-grid">${resources.map(card).join('')}</div>${resources.length?'':'<p class="empty">該当する設備はありません。絞り込みを変更してください。</p>'}`;
   }
   if(focus)main.querySelectorAll<HTMLElement>('[data-command]').forEach(el=>{if(el.dataset.command===focus.command&&el.dataset.id===focus.id)el.focus({preventScroll:true});});
+  const nextEquipment=main.querySelector<HTMLDetailsElement>('.calendar-equipment');if(nextEquipment){nextEquipment.open=equipmentOpen;const list=nextEquipment.querySelector<HTMLElement>(':scope > div');if(list)list.scrollTop=equipmentScroll;}
   const nextScroll=main.querySelector<HTMLElement>('.gantt-scroll');if(nextScroll){nextScroll.scrollTop=chartScroll.top;nextScroll.scrollLeft=chartScroll.left;}
 }
 function bookingInfo(r:Equipment,s:EquipmentState,large=false){
@@ -154,6 +164,8 @@ document.addEventListener('click',event=>{
   if(target.hasAttribute('data-close')){if(!busy)$<HTMLDialogElement>('booking-dialog').close();return;}
   if(target.dataset.day){selectedDate=target.dataset.day==='today'?jstDate(now()):jstDate(midnight(selectedDate)+Number(target.dataset.day)*DAY);void refresh();return;}
   const command=target.dataset.command,id=target.dataset.id!;if(!data)return;
+  if(command==='calendar'){selected='';displayMode='calendar';render();void refreshCalendar();return;}
+  if(command?.startsWith('calendar-')){calendarCommand(command,target);return;}
   if(command==='gantt'){selected='';displayMode='gantt';render();$('main').focus();return;}
   if(command==='order-up'||command==='order-down'){moveOrder(id,command==='order-up'?-1:1);return;}
   if(command==='gantt-expand'){ganttExpanded=!ganttExpanded;render();return;}
@@ -167,7 +179,7 @@ document.addEventListener('click',event=>{
   const row=data.reservations.find(b=>b.id===id),r=data.resources.find(r=>r.id===(row?.resource_id??id));if(!r)return;
   openBooking(r,command==='now'?'create':command==='edit'?'update':command!,row,command==='now');
 });
-document.addEventListener('change',event=>{const target=event.target as HTMLInputElement;if(target.id==='gantt-range'){ganttRange=target.value==='workday'?'workday':'day';render();return;}if((target.id==='schedule-date'||target.id==='gantt-date')&&target.value){selectedDate=target.value;void refresh();}if(target.name==='purpose_choice')togglePurpose();if(/^(start|end)_(year|month)$/.test(target.name))syncDays(target.name.split('_')[0]);});
+document.addEventListener('change',event=>{const target=event.target as HTMLInputElement;if(target.id.startsWith('calendar-')||target.hasAttribute('data-calendar-resource')){calendarChange(target);return;}if(target.id==='gantt-range'){ganttRange=target.value==='workday'?'workday':'day';render();return;}if((target.id==='schedule-date'||target.id==='gantt-date')&&target.value){selectedDate=target.value;void refresh();}if(target.name==='purpose_choice')togglePurpose();if(/^(start|end)_(year|month)$/.test(target.name))syncDays(target.name.split('_')[0]);});
 function togglePurpose(){const form=$<HTMLFormElement>('booking-form'),choice=form.elements.namedItem('purpose_choice') as HTMLSelectElement|null,purpose=form.elements.namedItem('purpose') as HTMLTextAreaElement|null;if(purpose)purpose.closest('label')!.hidden=Boolean(choice&&choice.value&&choice.value!=='自由入力');}
 function openBooking(r:Equipment,action:string,row?:BookingView,startNow=false){
   if(!fresh()){toast('最新情報を取得してから予約してください。');return;}
@@ -177,7 +189,7 @@ function openBooking(r:Equipment,action:string,row?:BookingView,startNow=false){
   $('booking-title').textContent=({create:startNow?'今すぐ予約':'日時を指定して予約',update:'予約を変更',cancel:'予約をキャンセル',finish:'利用を今すぐ終了',extend:'予約を30分延長'} as Record<string,string>)[action];
   $('booking-equipment').textContent=r.name+(row?' ／ '+row.person+' ／ '+interval(row):'');
   const choice=row?(row.purpose&&r.purposes.includes(row.purpose)?row.purpose:'自由入力'):r.purposes[0]??'';
-  $('booking-fields').innerHTML=['create','update'].includes(action)?`<div class="form-grid">${startNow?'<p class="start-now">開始：予約確定時の現在時刻</p>':dateFields('start',row?.start_at??start,now())}${dateFields('end',row?.end_at??start+3600000,now())}${r.type==='quantity_resource'?`<label>使用台数<select name="quantity" required>${row&&row.quantity>(r.capacity??1)?`<option value="${row.quantity}" selected>${row.quantity}台（現在の予約）</option>`:''}${Array.from({length:r.capacity??1},(_,i)=>`<option value="${i+1}" ${i+1===(row?.quantity??1)?'selected':''}>${i+1}台</option>`).join('')}</select></label>`:''}${r.pools.length?`<label>使用場所<select name="pool_id" required><option value="">選択してください</option>${r.pools.map(p=>`<option value="${esc(p.id)}" ${row?.pool_id===p.id?'selected':''}>${esc(p.name)}（${p.capacity}台）</option>`).join('')}</select></label>`:''}</div>${r.purposes.length?`<label>用途<select name="purpose_choice">${r.purposes.map(p=>`<option ${p===choice?'selected':''}>${esc(p)}</option>`).join('')}</select></label>`:''}<label>用途の内容<textarea name="purpose" maxlength="300" rows="2" placeholder="例：試料の測定">${esc(row?.purpose??'')}</textarea></label><input type="hidden" name="start_now" value="${startNow?'1':'0'}">`:`<p class="confirm-operation">${esc(({cancel:'この予約をキャンセルします。確定後は予約枠が解放されます。',finish:'終了時刻を確定時点の現在時刻に変更します。実稼働の記録ではありません。',extend:'終了時刻を30分延長します。他の予約と重なる場合は保存できません。'} as Record<string,string>)[action])}</p>`;
+  $('booking-fields').innerHTML=['create','update'].includes(action)?`<div class="form-grid">${startNow?'<p class="start-now">開始：予約確定時の現在時刻</p>':dateFields('start',row?.start_at??start,now())}${dateFields('end',row?.end_at??start+3600000,now())}${r.type==='quantity_resource'?`<label class="booking-choice">使用台数<select name="quantity" required>${row&&row.quantity>(r.capacity??1)?`<option value="${row.quantity}" selected>${row.quantity}台（現在の予約）</option>`:''}${Array.from({length:r.capacity??1},(_,i)=>`<option value="${i+1}" ${i+1===(row?.quantity??1)?'selected':''}>${i+1}台</option>`).join('')}</select></label>`:''}${r.pools.length?`<label class="booking-choice">使用場所<select name="pool_id" required><option value="">選択してください</option>${r.pools.map(p=>`<option value="${esc(p.id)}" ${row?.pool_id===p.id?'selected':''}>${esc(p.name)}（${p.capacity}台）</option>`).join('')}</select></label>`:''}</div>${r.purposes.length?`<label>用途<select name="purpose_choice">${r.purposes.map(p=>`<option ${p===choice?'selected':''}>${esc(p)}</option>`).join('')}</select></label>`:''}<label>用途の内容<textarea name="purpose" maxlength="300" rows="2" placeholder="例：試料の測定">${esc(row?.purpose??'')}</textarea></label><input type="hidden" name="start_now" value="${startNow?'1':'0'}">`:`<p class="confirm-operation">${esc(({cancel:'この予約をキャンセルします。確定後は予約枠が解放されます。',finish:'終了時刻を確定時点の現在時刻に変更します。実稼働の記録ではありません。',extend:'終了時刻を30分延長します。他の予約と重なる場合は保存できません。'} as Record<string,string>)[action])}</p>`;
   const users=form.elements.namedItem('user') as HTMLSelectElement;users.innerHTML='<option value="">選択してください</option>'+data!.members.map(m=>`<option value="${esc(m.id)}">${esc(m.name)}</option>`).join('');
   $('booking-error').textContent='';$('booking-submit').textContent='内容を確認する';$('booking-note').textContent='個人PINはこの操作の確認にだけ使い、端末に保存しません。';togglePurpose();dialog.showModal();
 }
@@ -284,7 +296,7 @@ historyForm.onsubmit=event=>{event.preventDefault();void loadHistory(true);};
 $('history-more').onclick=()=>void loadHistory(false);
 
 function openGanttBooking(id:string){
- const b=data?.reservations.find(row=>row.id===id);if(!b)return;const r=data!.resources.find(item=>item.id===b.resource_id)!;
+ const b=data?.reservations.find(row=>row.id===id);if(!b)return;$('gantt-dialog-title').textContent='予約の詳細';$('gantt-detail').hidden=false;const r=data!.resources.find(item=>item.id===b.resource_id)!;
  $('gantt-info').innerHTML=`<h3>${esc(r.name)}</h3><p class="gantt-info-time">${esc(stamp(b.start_at))} 〜 ${esc(stamp(b.end_at))}</p><dl><dt>予約者</dt><dd>${esc(b.person)}</dd><dt>用途</dt><dd>${esc(b.purpose||'用途の記載なし')}</dd>${r.type==='quantity_resource'?`<dt>台数・場所</dt><dd>${b.quantity}台・${esc(r.pools.find(p=>p.id===b.pool_id)?.name??'場所未設定')}</dd>`:''}</dl>`;
  $('gantt-detail').onclick=()=>{$<HTMLDialogElement>('gantt-dialog').close();selected=r.id;render();$('main').focus();};
  $<HTMLDialogElement>('gantt-dialog').showModal();
@@ -309,3 +321,33 @@ function moveOrder(id:string,direction:number){const index=orderDraft.indexOf(id
 $('order-close').onclick=()=>orderDialog.close();
 $('order-save').onclick=()=>{preferences('lab-resource-order',JSON.stringify(orderDraft));$<HTMLSelectElement>('sort').value='custom';orderDialog.close();render();toast('この端末の並び順を保存しました。');};
 $('order-reset').onclick=()=>{preferences('lab-resource-order','[]');$<HTMLSelectElement>('sort').value='default';orderDialog.close();render();toast('登録順に戻しました。');};
+
+function visibleCalendarResources(){return new Set((calendarState?.resources??[]).filter(r=>r.kind==='equipment'?calendarEquipment.has(r.id):!calendarHiddenEvents.has(r.id)).map(r=>r.id));}
+async function refreshCalendar(){
+ if(!data||calendarLoading)return;const month=calendarMonth,sequence=++calendarRequest;calendarLoading=true;
+ try{
+  const result=await api('calendar?month='+encodeURIComponent(month)) as CalendarData;
+  if(sequence!==calendarRequest||!data)return;if(result.month!==calendarMonth)return;
+  if(!Array.isArray(result.items)||!Array.isArray(result.resources)||!Array.isArray(result.upcoming))throw new Error('予定情報の形式を確認できません。');
+  calendarError='';const signature=JSON.stringify({...result,server_time:0});calendarState=result;calendarReceived=performance.now();calendarWall=Date.now();
+  if(signature!==calendarSignature&&displayMode==='calendar'){calendarSignature=signature;render();}
+ }catch(error){if(sequence===calendarRequest){calendarError=message(error);if(displayMode==='calendar')render();}}
+ finally{if(sequence===calendarRequest){calendarLoading=false;if(month!==calendarMonth)void refreshCalendar();if(displayMode==='calendar')update();}}
+}
+function calendarCommand(command:string,target:HTMLElement){
+ if(command==='calendar-info'){
+  const item=[...(calendarState?.items??[]),...(calendarState?.upcoming??[])].find(i=>i.id===target.dataset.id),resource=calendarState?.resources.find(r=>r.id===item?.resource_id);if(!item||!resource)return;
+  $('gantt-dialog-title').textContent='予定の詳細';$('gantt-info').innerHTML=calendarDetail(item,resource);$('gantt-detail').hidden=true;$<HTMLDialogElement>('gantt-dialog').showModal();return;
+ }
+ if(command==='calendar-day'){calendarDay=target.dataset.date!;render();const agenda=document.querySelector<HTMLElement>('.calendar-agenda'),section=agenda?.querySelector<HTMLElement>('.calendar-selected-day');if(agenda&&section){if(innerWidth>750)agenda.scrollTop=section.offsetTop;else section.scrollIntoView({block:'nearest'});}return;}
+ if(command==='calendar-retry'){void refreshCalendar();return;}
+ if(command==='calendar-today'){calendarMonth=jstDate(now()).slice(0,7);calendarDay=jstDate(now());}
+ else {const [year,month]=calendarMonth.split('-').map(Number);calendarMonth=new Date(Date.UTC(year,month-1+(command==='calendar-prev'?-1:1),1)).toISOString().slice(0,7);calendarDay=calendarMonth+'-01';}
+ render();void refreshCalendar();
+}
+function calendarChange(target:HTMLInputElement){
+ if(target.id==='calendar-year'||target.id==='calendar-month'){calendarMonth=$<HTMLSelectElement>('calendar-year').value+'-'+$<HTMLSelectElement>('calendar-month').value.padStart(2,'0');calendarDay=calendarMonth+'-01';render();void refreshCalendar();return;}
+ if(target.id==='calendar-all-equipment'){calendarEquipment.clear();if(target.checked)for(const r of calendarState?.resources??[])if(r.kind==='equipment')calendarEquipment.add(r.id);}
+ else {const r=calendarState?.resources.find(r=>r.id===target.dataset.calendarResource);if(!r)return;const set=r.kind==='equipment'?calendarEquipment:calendarHiddenEvents;if(r.kind==='equipment'){if(target.checked)set.add(r.id);else set.delete(r.id);}else{if(target.checked)set.delete(r.id);else set.add(r.id);}}
+ preferences('lab-calendar-equipment',JSON.stringify([...calendarEquipment]));preferences('lab-calendar-hidden-events',JSON.stringify([...calendarHiddenEvents]));render();
+}

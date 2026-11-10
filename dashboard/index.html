@@ -6,6 +6,7 @@
   <meta name="color-scheme" content="light dark">
   <title>研究室 設備予約</title>
   <link rel="icon" href="data:,">
+  <link rel="preload" href="/dashboard/assets/fonts/noto-sans-jp-variable.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/dashboard/assets/style.css">
   <link rel="stylesheet" href="/dashboard/assets/terminal.css">
   <script type="module" src="/dashboard/assets/dashboard/app.js"></script>
@@ -25,6 +26,7 @@
     <section class="summary" aria-label="設備と接続の概要"><div id="counts"></div><div class="connection"><strong id="connection">接続中</strong><span id="updated">まだ取得していません</span><button id="refresh">更新</button></div></section>
     <p id="warning" class="warning" role="status" hidden></p>
     <nav class="toolbar" aria-label="表示を切り替え">
+      <button id="calendar-toggle" type="button" aria-pressed="false">予定カレンダー</button>
       <button id="gantt-toggle" type="button" aria-pressed="false">全体スケジュール</button>
 
       <label class="search-label">設備・部屋を検索<input id="search" type="search" placeholder="設備名・部屋名" autocomplete="off"></label>

@@ -7,6 +7,7 @@ import {extendBooking} from '../services/booking-tools';
 import {jstDate} from '../../shared/dashboard';
 import {snapshot} from './data';
 import {bookingHistory} from './history';
+import {calendarData} from './calendar';
 import {listDevices,manageDevice} from './devices';
 import {changePIN,resetPIN} from './pins';
 import {DashboardError,securityHeaders,requireOrigin,readJSON,requireDevice,requireMember,deviceCookie,pinHash,equalSecret,sign} from './auth';
@@ -54,6 +55,7 @@ export async function dashboardRoute(request:Request,env:Env,ctx:Pick<ExecutionC
     }
     if(path==='/dashboard/api/snapshot'&&request.method==='GET')return json(await snapshot(env.DB,url.searchParams.get('date')??jstDate(now),now));
     if(path==='/dashboard/api/history'&&request.method==='GET')return json(await bookingHistory(env.DB,url.searchParams,now));
+    if(path==='/dashboard/api/calendar'&&request.method==='GET')return json(await calendarData(env.DB,url.searchParams.get('month')??jstDate(now).slice(0,7),now));
     if(path==='/dashboard/api/bookings'&&request.method==='POST') {
       const body=await readJSON(request),member=await requireMember(env,body.user,body.pin,now);
       const action=body.action,resourceId=body.resource_id,id=body.reservation_id,version=body.version;
