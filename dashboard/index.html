@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
   <meta name="color-scheme" content="light dark">
   <title>研究室 設備予約</title>
   <link rel="icon" href="data:,">
@@ -14,10 +14,10 @@
 <body>
   <header class="app-header">
     <div><h1><button id="home" class="brand-home" data-command="overview" aria-label="研究室 設備予約：設備一覧に戻る">研究室 設備予約</button></h1><p>予約状況を確認・タブレットから予約</p></div>
-    <div class="header-right"><time id="clock">日時を確認しています</time><div class="header-actions"><button id="pin-settings" class="header-button" hidden>PINを変更</button><button id="theme" class="header-button">ダーク表示</button><button id="fullscreen" class="header-button">全画面</button><button id="lock" class="header-button" hidden>端末ロック</button></div></div>
+    <div class="header-right"><time id="clock">日時を確認しています</time><div class="header-actions"><button id="theme" class="header-button">ダーク表示</button><button id="fullscreen" class="header-button">全画面</button><button id="lock" class="header-button" hidden>端末ロック</button></div></div>
   </header>
   <section id="unlock" class="unlock-panel" aria-labelledby="unlock-title">
-    <h2 id="unlock-title">共用タブレットを接続</h2><p>管理者から受け取った端末キーを入力してください。<br>接続後、予約する人を個人PINで確認します。</p>
+    <h2 id="unlock-title">共用タブレットを接続</h2><p>管理者から受け取った端末キーを入力してください。<br>接続後、予約する人の氏名を選択します。</p>
     <form id="unlock-form"><label>端末キー<input name="key" type="password" required autocomplete="off" maxlength="200"></label><button class="primary" type="submit">接続する</button></form>
     <button id="scan-qr" type="button">端末キーのQRコードを読む</button>
     <p id="unlock-error" role="alert"></p>
@@ -41,7 +41,7 @@
   <dialog id="booking-dialog" aria-labelledby="booking-title"><form id="booking-form">
     <div class="dialog-heading"><h2 id="booking-title">予約する</h2><button type="button" data-close aria-label="予約画面を閉じる">閉じる</button></div>
     <p id="booking-equipment"></p><div id="booking-fields"></div>
-    <fieldset class="identity"><legend>予約する人を確認</legend><label>氏名<select name="user" required><option value="">選択してください</option></select></label><label>個人PIN<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" minlength="4" maxlength="4" autocomplete="off" required placeholder="数字4桁"></label></fieldset>
+    <fieldset class="identity"><legend>操作する利用者</legend><label>氏名<select name="user" required><option value="">選択してください</option></select></label></fieldset>
     <p id="booking-error" class="form-error" role="alert"></p><p id="booking-note" class="muted">確定時に最新の予約・故障点検と照合します。</p>
     <div class="dialog-actions"><button type="button" data-close>戻る</button><button id="booking-submit" class="primary" type="submit">内容を確認する</button></div>
   </form></dialog>
@@ -53,16 +53,7 @@
     <form id="history-form" class="history-controls"><label>終了日の開始<input name="from" type="date" required></label><label>終了日の最終<input name="to" type="date" required></label><button type="submit">表示する</button></form>
     <p id="history-message" role="status"></p><div id="history-list"></div><button id="history-more" type="button" hidden>さらに30件を表示</button>
   </dialog>
-  <dialog id="pin-dialog" aria-labelledby="pin-title"><form id="pin-form">
-    <div class="dialog-heading"><h2 id="pin-title">個人PINを変更</h2><button id="pin-close" type="button">閉じる</button></div>
-    <p class="muted">初期PINは0000です。変更後のPINは保存・表示せず、ハッシュだけを管理します。</p>
-    <label>氏名<select name="user" required></select></label>
-    <label>現在のPIN<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" minlength="4" maxlength="4" autocomplete="off" required></label>
-    <div class="form-grid"><label>新しいPIN<input name="new_pin" type="password" inputmode="numeric" pattern="[0-9]{4}" minlength="4" maxlength="4" autocomplete="off" required></label><label>新しいPIN（確認）<input name="confirm_pin" type="password" inputmode="numeric" pattern="[0-9]{4}" minlength="4" maxlength="4" autocomplete="off" required></label></div>
-    <p class="muted">PINを忘れた・入力制限になった場合は、管理者に0000へのリセットを依頼してください。</p>
-    <p id="pin-error" class="form-error" role="alert"></p><div class="dialog-actions"><button class="primary" type="submit">PINを変更する</button></div>
-  </form></dialog>
-  <dialog id="qr-dialog" aria-labelledby="qr-title"><div class="dialog-heading"><h2 id="qr-title">端末キーのQRコード</h2><button id="qr-close" type="button">閉じる</button></div>
+<dialog id="qr-dialog" aria-labelledby="qr-title"><div class="dialog-heading"><h2 id="qr-title">端末キーのQRコード</h2><button id="qr-close" type="button">閉じる</button></div>
     <p class="muted">このタブレット用のQRをカメラに向けてください。画像は端末内で読み取り、送信しません。</p>
     <video id="qr-video" autoplay muted playsinline></video><p id="qr-message" role="status">カメラを起動しています…</p>
     <label>QRの画像ファイルから読み取る<input id="qr-file" type="file" accept="image/*"></label>

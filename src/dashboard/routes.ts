@@ -9,8 +9,7 @@ import {snapshot} from './data';
 import {bookingHistory} from './history';
 import {calendarData} from './calendar';
 import {listDevices,manageDevice} from './devices';
-import {changePIN,resetPIN} from './pins';
-import {DashboardError,securityHeaders,requireOrigin,readJSON,requireDevice,requireMember,deviceCookie,pinHash,equalSecret,sign} from './auth';
+import {DashboardError,securityHeaders,requireOrigin,readJSON,requireDevice,requireMember,deviceCookie,equalSecret,sign} from './auth';
 
 const json=(value:unknown,status=200,extra:Record<string,string>={})=>Response.json(value,{status,headers:{...securityHeaders,...extra}});
 type Dependencies={clock?:()=>number;notify?:(receipt:Receipt)=>Promise<{warnings:string[]}>};
@@ -38,8 +37,10 @@ export async function dashboardRoute(request:Request,env:Env,ctx:Pick<ExecutionC
     if(path==='/admin/dashboard/member'&&request.method==='POST') {
       if(!env.ADMIN_TOKEN||!await equalSecret(request.headers.get('Authorization')??'',`Bearer ${env.ADMIN_TOKEN}`))throw new DashboardError('Unauthorized',401);
       const body=await readJSON(request);
-      if(body.action!=='reset'&&body.action!=='disable')throw new DashboardError('reset または disable を指定してください。');
-      await resetPIN(env,body.user,body.action==='disable'?false:body.enabled,now);
+      if(!['enable','disable'].includes(String(body.action))||typeof body.user!=='string'||!/^U[A-Z0-9]+$/.test(body.user))throw new DashboardError('利用者とenableまたはdisableを指定してください。');
+      if(!await env.DB.prepare('SELECT 1 FROM member_names WHERE slack_user_id=?').bind(body.user).first())throw new DashboardError('登録済みの利用者を指定してください。');
+      // 旧スキーマの必須列には空文字を使い、PINは生成・照合しない。既存ハッシュは上書きしない。
+      await env.DB.prepare(`INSERT INTO dashboard_members(slack_user_id,pin_salt,pin_hash,enabled,updated_at) VALUES(?,'','',?,?) ON CONFLICT(slack_user_id) DO UPDATE SET enabled=excluded.enabled,updated_at=excluded.updated_at`).bind(body.user,body.action==='enable'?1:0,now).run();
       return json({ok:true});
     }
     if(path==='/dashboard/api/unlock'&&request.method==='POST') {
@@ -49,21 +50,17 @@ export async function dashboardRoute(request:Request,env:Env,ctx:Pick<ExecutionC
     }
     if(path==='/dashboard/api/lock'&&request.method==='POST')return json({ok:true},200,{'Set-Cookie':`lab_dashboard=; Path=/dashboard; HttpOnly; SameSite=Strict; Max-Age=0${url.protocol==='https:'?'; Secure':''}`});
     await requireDevice(env,request,now);
-    if(path==='/dashboard/api/pin'&&request.method==='POST'){
-      await changePIN(env,await readJSON(request),now);
-      return json({ok:true,message:'PINを変更しました。次の操作から新しい4桁を使ってください。'});
-    }
     if(path==='/dashboard/api/snapshot'&&request.method==='GET')return json(await snapshot(env.DB,url.searchParams.get('date')??jstDate(now),now));
     if(path==='/dashboard/api/history'&&request.method==='GET')return json(await bookingHistory(env.DB,url.searchParams,now));
     if(path==='/dashboard/api/calendar'&&request.method==='GET')return json(await calendarData(env.DB,url.searchParams.get('month')??jstDate(now).slice(0,7),now));
     if(path==='/dashboard/api/bookings'&&request.method==='POST') {
-      const body=await readJSON(request),member=await requireMember(env,body.user,body.pin,now);
+      const body=await readJSON(request),member=await requireMember(env,body.user);
       const action=body.action,resourceId=body.resource_id,id=body.reservation_id,version=body.version;
       if(typeof body.request_id!=='string'||!/^[a-f0-9-]{36}$/.test(body.request_id)||typeof resourceId!=='string'||!['create','update','cancel','finish','extend'].includes(String(action)))throw new DashboardError('予約操作を確認できません。');
       const service=new Reservations(env.DB,()=>now,env.OPERATIONS_CHANNEL_ID,false,env.ADMIN_USER_IDS),resource=await service.resource(resourceId);
       if(resource.schedule_event)throw new DashboardError('設備予約だけが対象です。');
       if(action!=='create'&&(typeof id!=='string'||!Number.isSafeInteger(version)))throw new DashboardError('予約を選び直してください。');
-      // 同じリクエストIDの再送では内容を変更できない。PINは記録しない。
+      // 同じリクエストIDの再送では内容を変更できない。
       const canonical=JSON.stringify([member.id,action,resourceId,id??null,version??null,body.start_now===true,body.start_at??null,body.end_at??null,body.quantity??null,body.purpose??null,body.purpose_choice??null,body.pool_id??null,body.minutes??null]);
       const fingerprint=await sign(env.DASHBOARD_SECRET!,canonical),key='dashboard:'+body.request_id;
       await env.DB.prepare('INSERT INTO dashboard_operations(request_key,fingerprint) VALUES(?,?) ON CONFLICT DO NOTHING').bind(key,fingerprint).run();

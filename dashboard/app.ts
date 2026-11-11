@@ -49,7 +49,7 @@ async function api(path:string,body?:Record<string,unknown>) {
     return result;
   } finally {clearTimeout(timeout);}
 }
-function showUnlock(){calendarState=null;calendarRequest++;calendarLoading=false;calendarSignature='';document.body.dataset.ganttExpanded='false';data=null;lastSignature='';$('workspace').hidden=true;$('lock').hidden=true;$('pin-settings').hidden=true;$('unlock').hidden=false;$('main').replaceChildren();for(const id of ['booking-dialog','pin-dialog','history-dialog','gantt-dialog','order-dialog'])if($<HTMLDialogElement>(id).open)$<HTMLDialogElement>(id).close();if(pollTimer)clearTimeout(pollTimer);}
+function showUnlock(){calendarState=null;calendarRequest++;calendarLoading=false;calendarSignature='';document.body.dataset.ganttExpanded='false';data=null;lastSignature='';$('workspace').hidden=true;$('lock').hidden=true;$('unlock').hidden=false;$('main').replaceChildren();for(const id of ['booking-dialog','history-dialog','gantt-dialog','order-dialog'])if($<HTMLDialogElement>(id).open)$<HTMLDialogElement>(id).close();if(pollTimer)clearTimeout(pollTimer);}
 $<HTMLFormElement>('unlock-form').onsubmit=async event=>{
   event.preventDefault();const form=event.currentTarget as HTMLFormElement,button=form.querySelector('button')!;button.disabled=true;$('unlock-error').textContent='';
   try{await api('unlock',{key:(new FormData(form).get('key')??'').toString()});form.reset();await refresh();}catch(error){$('unlock-error').textContent=message(error);}finally{button.disabled=false;}
@@ -65,7 +65,7 @@ async function refresh(){
     if(data&&result.date!==selectedDate){rerun=true;return;}
     if(!data)selectedDate=result.date;
     data=result;serverTime=result.server_time+(performance.now()-started)/2;received=performance.now();receivedWall=Date.now();failures=0;
-    $('unlock').hidden=true;$('workspace').hidden=false;$('lock').hidden=false;$('pin-settings').hidden=false;
+    $('unlock').hidden=true;$('workspace').hidden=false;$('lock').hidden=false;
     const signature=JSON.stringify({...result,server_time:0});
     if(signature!==lastSignature){lastSignature=signature;render();}update();void keepAwake();if(displayMode==='calendar')void refreshCalendar();
   } catch(error){failures++;if(data){$('warning').textContent='通信が不安定です。自動で再接続します。 '+message(error);$('warning').hidden=false;update();}else $('unlock-error').textContent=message(error);}
@@ -191,13 +191,13 @@ function openBooking(r:Equipment,action:string,row?:BookingView,startNow=false){
   $('booking-title').textContent=({create:startNow?'今すぐ予約':'日時を指定して予約',update:'予約を変更',cancel:'予約をキャンセル',finish:'利用を今すぐ終了',extend:'予約を30分延長'} as Record<string,string>)[action];
   $('booking-equipment').textContent=r.name+(row?' ／ '+row.person+' ／ '+interval(row):'');
   const choice=row?(row.purpose&&r.purposes.includes(row.purpose)?row.purpose:'自由入力'):r.purposes[0]??'';
-  $('booking-fields').innerHTML=['create','update'].includes(action)?`<div class="form-grid">${startNow?'<p class="start-now">開始：予約確定時の現在時刻</p>':dateFields('start',row?.start_at??start,now())}${dateFields('end',row?.end_at??start+3600000,now())}${r.type==='quantity_resource'?`<label class="booking-choice">使用台数<select name="quantity" required>${row&&row.quantity>(r.capacity??1)?`<option value="${row.quantity}" selected>${row.quantity}台（現在の予約）</option>`:''}${Array.from({length:r.capacity??1},(_,i)=>`<option value="${i+1}" ${i+1===(row?.quantity??1)?'selected':''}>${i+1}台</option>`).join('')}</select></label>`:''}${r.pools.length?`<label class="booking-choice">使用場所<select name="pool_id" required><option value="">選択してください</option>${r.pools.map(p=>`<option value="${esc(p.id)}" ${row?.pool_id===p.id?'selected':''}>${esc(p.name)}（${p.capacity}台）</option>`).join('')}</select></label>`:''}</div>${r.purposes.length?`<label>用途<select name="purpose_choice">${r.purposes.map(p=>`<option ${p===choice?'selected':''}>${esc(p)}</option>`).join('')}</select></label>`:''}<label>用途の内容<textarea name="purpose" maxlength="300" rows="2" placeholder="例：試料の測定">${esc(row?.purpose??'')}</textarea></label><input type="hidden" name="start_now" value="${startNow?'1':'0'}">`:`<p class="confirm-operation">${esc(({cancel:'この予約をキャンセルします。確定後は予約枠が解放されます。',finish:'終了時刻を確定時点の現在時刻に変更します。実稼働の記録ではありません。',extend:'終了時刻を30分延長します。他の予約と重なる場合は保存できません。'} as Record<string,string>)[action])}</p>`;
+  $('booking-fields').innerHTML=['create','update'].includes(action)?`<div class="form-grid">${startNow?'<p class="start-now">開始：予約確定時の現在時刻</p>':dateFields('start',row?.start_at??start,now())}${dateFields('end',row?.end_at??start+3600000,now())}${r.type==='quantity_resource'?`<label class="booking-choice">使用台数<select name="quantity" required>${row&&row.quantity>(r.capacity??1)?`<option value="${row.quantity}" selected>${row.quantity}台（現在の予約）</option>`:''}${Array.from({length:r.capacity??1},(_,i)=>`<option value="${i+1}" ${i+1===(row?.quantity??1)?'selected':''}>${i+1}台</option>`).join('')}</select></label>`:''}${r.pools.length?`<label class="booking-choice">使用場所<select name="pool_id" required><option value="">選択してください</option>${r.pools.map(p=>`<option value="${esc(p.id)}" ${row?.pool_id===p.id?'selected':''}>${esc(p.name)}（${p.capacity}台）</option>`).join('')}</select></label>`:''}</div>${r.purposes.length?`<label>用途<select name="purpose_choice">${r.purposes.map(p=>`<option ${p===choice?'selected':''}>${esc(p)}</option>`).join('')}</select></label>`:''}<label>用途の内容<textarea inputmode="text" enterkeyhint="done" virtualkeyboardpolicy="auto" name="purpose" maxlength="300" rows="2" placeholder="例：試料の測定">${esc(row?.purpose??'')}</textarea></label><input type="hidden" name="start_now" value="${startNow?'1':'0'}">`:`<p class="confirm-operation">${esc(({cancel:'この予約をキャンセルします。確定後は予約枠が解放されます。',finish:'終了時刻を確定時点の現在時刻に変更します。実稼働の記録ではありません。',extend:'終了時刻を30分延長します。他の予約と重なる場合は保存できません。'} as Record<string,string>)[action])}</p>`;
   const users=form.elements.namedItem('user') as HTMLSelectElement;users.innerHTML='<option value="">選択してください</option>'+data!.members.map(m=>`<option value="${esc(m.id)}">${esc(m.name)}</option>`).join('');
-  $('booking-error').textContent='';$('booking-submit').textContent='内容を確認する';$('booking-note').textContent='個人PINはこの操作の確認にだけ使い、端末に保存しません。';togglePurpose();dialog.showModal();
+  $('booking-error').textContent='';$('booking-submit').textContent='内容を確認する';$('booking-note').textContent='氏名と内容を確認して予約してください。';togglePurpose();dialog.showModal();
 }
 const form=$<HTMLFormElement>('booking-form');
-// PINの再入力では操作IDを変更しない。通信切断後の再試行も同じ予約として扱う。
-function invalidateConfirmation(event:Event){if((event.target as HTMLInputElement).name==='pin')return;if(pending?.confirmed&&!busy){pending.confirmed=false;pending.wire=undefined;pending.requestId=crypto.randomUUID();$('booking-submit').textContent='内容を確認する';}}
+// 内容を変えない再送は同じ操作IDを使い、二重登録を防ぐ。
+function invalidateConfirmation(event:Event){if(pending?.confirmed&&!busy){pending.confirmed=false;pending.wire=undefined;pending.requestId=crypto.randomUUID();$('booking-submit').textContent='内容を確認する';}}
 form.addEventListener('input',invalidateConfirmation);
 form.addEventListener('change',invalidateConfirmation);
 form.onsubmit=async event=>{
@@ -212,11 +212,11 @@ form.onsubmit=async event=>{
     Object.assign(wire,{start_now:startNow,start_at:start,end_at:end,quantity:Number(values.get('quantity')??1),pool_id:values.get('pool_id')||null,purpose_choice:choice==='自由入力'?'':choice,purpose:!choice||choice==='自由入力'?values.get('purpose')?.toString().trim()??'':choice});
   }
   if(!p.confirmed){p.wire=wire;p.confirmed=true;$('booking-submit').textContent='この内容で確定する';$('booking-note').textContent='内容と氏名を確認し、もう一度押すと確定します。';$('booking-error').textContent='';return;}
-  busy=true;const pin=form.elements.namedItem('pin') as HTMLInputElement,pinValue=pin.value;
+  busy=true;
   form.querySelectorAll<HTMLButtonElement|HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement>('button,input,select,textarea').forEach(el=>el.disabled=true);$('booking-submit').textContent='保存しています…';$('booking-error').textContent='';
   try{
-    const result=await api('bookings',{...p.wire,pin:pinValue});pin.value='';$<HTMLDialogElement>('booking-dialog').close();toast(result.message);await refresh();
-  }catch(error){$('booking-error').textContent=message(error)+' 通信エラーの場合は、内容を変えずにPINを再入力して再試行できます。';pin.value='';}
+    const result=await api('bookings',p.wire);$<HTMLDialogElement>('booking-dialog').close();toast(result.message);await refresh();
+  }catch(error){$('booking-error').textContent=message(error)+' 通信エラーの場合は、内容を変えずに再試行できます。';}
   finally{busy=false;form.querySelectorAll<HTMLButtonElement|HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement>('button,input,select,textarea').forEach(el=>el.disabled=false);$('booking-submit').textContent='この内容で確定する';}
 };
 const dialog=$<HTMLDialogElement>('booking-dialog');dialog.addEventListener('cancel',event=>{if(busy)event.preventDefault();});dialog.addEventListener('close',()=>{form.reset();pending=null;});
@@ -225,21 +225,6 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden){void refr
 setInterval(update,1000);
 setInterval(()=>{if((selected||displayMode==='gantt')&&data&&fresh())render();},60000);
 
-const pinDialog=$<HTMLDialogElement>('pin-dialog'),pinForm=$<HTMLFormElement>('pin-form');let changingPIN=false;
-$('pin-settings').onclick=()=>{
-  if(!data)return;pinForm.reset();$('pin-error').textContent='';
-  (pinForm.elements.namedItem('user') as HTMLSelectElement).innerHTML='<option value="">選択してください</option>'+data.members.map(m=>`<option value="${esc(m.id)}">${esc(m.name)}</option>`).join('');pinDialog.showModal();
-};
-$('pin-close').onclick=()=>{if(!changingPIN)pinDialog.close();};
-pinDialog.addEventListener('cancel',event=>{if(changingPIN)event.preventDefault();});pinDialog.addEventListener('close',()=>pinForm.reset());
-pinForm.onsubmit=async event=>{
-  event.preventDefault();if(changingPIN)return;
-  const values=new FormData(pinForm);if(values.get('new_pin')!==values.get('confirm_pin')){$('pin-error').textContent='新しいPINと確認用PINが一致しません。';return;}
-  changingPIN=true;pinForm.querySelectorAll<HTMLInputElement|HTMLSelectElement|HTMLButtonElement>('input,select,button').forEach(el=>el.disabled=true);$('pin-error').textContent='';
-  try{const result=await api('pin',Object.fromEntries(values));pinDialog.close();toast(result.message);}
-  catch(error){$('pin-error').textContent=message(error)+' 通信結果が不明な場合は新しいPINも確認してください。';}
-  finally{changingPIN=false;pinForm.querySelectorAll<HTMLInputElement|HTMLSelectElement|HTMLButtonElement>('input,select,button').forEach(el=>el.disabled=false);pinForm.querySelectorAll<HTMLInputElement>('input').forEach(el=>el.value='');}
-};
 const qrDialog=$<HTMLDialogElement>('qr-dialog');let qrAbort:AbortController|null=null;
 function qrKey(text:string):string {
   if(/^[A-Za-z0-9_-]{32,200}$/.test(text))return text;
@@ -357,3 +342,8 @@ function calendarChange(target:HTMLInputElement){
  else {const r=calendarState?.resources.find(r=>r.id===target.dataset.calendarResource);if(!r)return;const set=r.kind==='equipment'?calendarEquipment:calendarHiddenEvents;if(r.kind==='equipment'){if(target.checked)set.add(r.id);else set.delete(r.id);}else{if(target.checked)set.delete(r.id);else set.add(r.id);}}
  preferences('lab-calendar-equipment',JSON.stringify([...calendarEquipment]));preferences('lab-calendar-hidden-events',JSON.stringify([...calendarHiddenEvents]));render();
 }
+
+// Windowsのタッチキーボードで表示領域が縮んだ場合も、入力欄と操作部を画面内で扱えるようにする。
+function updateInputViewport(){document.documentElement.style.setProperty('--input-viewport',`${Math.round(window.visualViewport?.height??innerHeight)}px`);}
+window.visualViewport?.addEventListener('resize',updateInputViewport);updateInputViewport();
+document.addEventListener('focusin',event=>{const field=event.target as HTMLElement;if(field.matches('textarea,input[type=text],input[type=search]'))setTimeout(()=>field.scrollIntoView({block:'nearest'}),150);});

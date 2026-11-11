@@ -1,7 +1,6 @@
 import {reserveWash} from '../src/services/washing';
 import {dashboardRoute} from '../src/dashboard/routes';
 import {manageDevice,listDevices} from '../src/dashboard/devices';
-import {pinHash} from '../src/dashboard/auth';
 import {snapshot as dashboardSnapshot} from '../src/dashboard/data';
 import {equipmentState,availability,midnight,DAY,type Equipment,type BookingView} from '../shared/dashboard';
 import {washForm,washBookings,washAction,submitWash} from '../src/washing-ui';
@@ -102,7 +101,7 @@ describe('tablet dashboard API and shared reservation compatibility',()=>{
     jobs=[];notify=vi.fn(async(_receipt:Receipt)=>({warnings:[] as string[]}));cookie='';
     for(const user of ['U1','U2']){
       await db.prepare('INSERT INTO member_names VALUES(?,?,?)').bind(user,user==='U1'?'予約者一':'予約者二',now).run();
-      const salt=crypto.randomUUID();await db.prepare('INSERT INTO dashboard_members VALUES(?,?,?,?,?)').bind(user,salt,await pinHash(env,user,'1234',salt),1,now).run();
+      const salt=crypto.randomUUID();await db.prepare('INSERT INTO dashboard_members VALUES(?,?,?,?,?)').bind(user,salt,'ab'.repeat(32),1,now).run();
     }
     const device=await manageDevice(env,{action:'create',name:'テスト端末'},now);
     env.DASHBOARD_DEVICE_KEY=device.key;
@@ -170,34 +169,28 @@ describe('tablet dashboard API and shared reservation compatibility',()=>{
     const response=await dashboardRoute(new Request('https://test/admin/dashboard/devices',{headers:{Authorization:'Bearer test'}}),env,{waitUntil:()=>{}},{clock:()=>now});
     expect(response.status).toBe(200);const body=await response.text();expect(body).not.toContain('key_hash');expect(body).not.toContain(env.DASHBOARD_DEVICE_KEY!);
   });
-  it('member can change a four-digit PIN; old PIN stops working and no raw PIN is persisted',async()=>{
-    const changed=await call('/dashboard/api/pin',{user:'U1',pin:'1234',new_pin:'5678',confirm_pin:'5678'});expect(changed.status).toBe(200);
-    expect((await call('/dashboard/api/bookings',input())).status).toBe(403);
-    expect((await call('/dashboard/api/bookings',input({pin:'5678'}))).status).toBe(200);
-    const row=await db.prepare("SELECT * FROM dashboard_members WHERE slack_user_id='U1'").first<any>();expect(row.pin_hash).toMatch(/^[a-f0-9]{64}$/);
-    const events=(await db.prepare('SELECT * FROM dashboard_pin_events').all()).results;expect(events).toHaveLength(1);expect(events[0].action).toBe('changed');
-    expect(JSON.stringify(events)).not.toContain('5678');expect(Object.keys(row)).not.toContain('pin');
+  it('retired PIN endpoints cannot change saved credentials',async()=>{
+    const before=await db.prepare('SELECT * FROM dashboard_members ORDER BY slack_user_id').all();
+    expect((await call('/dashboard/api/pin',{user:'U1',pin:'1234',new_pin:'5678',confirm_pin:'5678'})).status).toBe(404);
+    expect((await call('/dashboard/api/pin',{},{cookie:''})).status).toBe(401);
+    expect((await db.prepare('SELECT * FROM dashboard_members ORDER BY slack_user_id').all()).results).toEqual(before.results);
   });
-  it('PIN change checks current PIN, confirmation and exactly four ASCII digits',async()=>{
-    for(const next of ['123','12345','１２３４','abcd'])expect((await call('/dashboard/api/pin',{user:'U1',pin:'1234',new_pin:next,confirm_pin:next})).status).toBe(400);
-    expect((await call('/dashboard/api/pin',{user:'U1',pin:'1234',new_pin:'5678',confirm_pin:'5679'})).status).toBe(400);
-    expect((await call('/dashboard/api/pin',{user:'U1',pin:'9999',new_pin:'5678',confirm_pin:'5678'})).status).toBe(403);
-    expect((await call('/dashboard/api/pin',{user:'U1',pin:'1234',new_pin:'5678',confirm_pin:'5678'},{cookie:''})).status).toBe(401);
-    expect((await db.prepare('SELECT * FROM dashboard_pin_events').all()).results).toHaveLength(0);
+  it('registered members can reserve without PIN and legacy PIN values are ignored',async()=>{
+    expect((await call('/dashboard/api/bookings',input({pin:undefined}))).status).toBe(200);
+    expect((await call('/dashboard/api/bookings',input({resource_id:'stirrer',pin:'unused'}))).status).toBe(200);
+    expect((await db.prepare('SELECT * FROM dashboard_pin_events').all()).results).toEqual([]);
   });
-  it('admin reset restores 0000, clears lockout, uses a unique salt and preserves disabled state',async()=>{
-    const reset=async(user:string)=>dashboardRoute(new Request('https://test/admin/dashboard/member',{method:'POST',headers:{Origin:'https://test','Content-Type':'application/json',Authorization:'Bearer test'},body:JSON.stringify({user,action:'reset'})}),env,{waitUntil:()=>{}},{clock:()=>now});
-    for(let i=0;i<5;i++)await call('/dashboard/api/pin',{user:'U1',pin:'9999',new_pin:'5678',confirm_pin:'5678'});
-    expect((await call('/dashboard/api/pin',{user:'U1',pin:'1234',new_pin:'5678',confirm_pin:'5678'})).status).toBe(429);
-    expect((await call('/admin/dashboard/member',{user:'U1',action:'reset'})).status).toBe(401);
-    expect((await reset('U1')).status).toBe(200);expect((await call('/dashboard/api/pin',{user:'U1',pin:'0000',new_pin:'1357',confirm_pin:'1357'})).status).toBe(200);
-    await reset('U1');await reset('U2');const hashes=(await db.prepare('SELECT pin_hash FROM dashboard_members').all<{pin_hash:string}>()).results;expect(hashes[0].pin_hash).not.toBe(hashes[1].pin_hash);
-    await db.prepare("UPDATE dashboard_members SET enabled=0 WHERE slack_user_id='U2'").run();await reset('U2');expect((await db.prepare("SELECT enabled FROM dashboard_members WHERE slack_user_id='U2'").first<any>()).enabled).toBe(0);
-  });
-  it('concurrent PIN changes cannot overwrite a change authenticated against an older hash',async()=>{
-    const statuses=await Promise.all(['2468','1357'].map(new_pin=>call('/dashboard/api/pin',{user:'U1',pin:'1234',new_pin,confirm_pin:new_pin}).then(r=>r.status)));
-    expect(statuses.filter(s=>s===200)).toHaveLength(1);expect(statuses.every(s=>[200,403,409].includes(s))).toBe(true);
-    expect((await db.prepare('SELECT * FROM dashboard_pin_events').all()).results).toHaveLength(1);
+  it('only admin can enable and disable existing members without resetting credentials',async()=>{
+    const admin=(body:Record<string,unknown>)=>dashboardRoute(new Request('https://test/admin/dashboard/member',{method:'POST',headers:{Origin:'https://test','Content-Type':'application/json',Authorization:'Bearer test'},body:JSON.stringify(body)}),env,{waitUntil:()=>{}},{clock:()=>now});
+    expect((await call('/admin/dashboard/member',{user:'U1',action:'disable'})).status).toBe(401);
+    const before=await db.prepare("SELECT pin_hash FROM dashboard_members WHERE slack_user_id='U1'").first();
+    expect((await admin({user:'U1',action:'disable'})).status).toBe(200);
+    expect((await call('/dashboard/api/bookings',input({pin:undefined}))).status).toBe(403);
+    expect((await admin({user:'U1',action:'enable'})).status).toBe(200);
+    expect((await call('/dashboard/api/bookings',input({pin:undefined}))).status).toBe(200);
+    expect(await db.prepare("SELECT pin_hash FROM dashboard_members WHERE slack_user_id='U1'").first()).toEqual(before);
+    expect((await admin({user:'U1',action:'reset'})).status).toBe(400);
+    expect((await admin({user:'UMISSING',action:'enable'})).status).toBe(400);
   });
   it('external notification failures do not undo a committed reservation or turn its retry into a new booking',async()=>{
     const log=vi.spyOn(console,'error').mockImplementation(()=>{});
@@ -209,17 +202,15 @@ describe('tablet dashboard API and shared reservation compatibility',()=>{
     const successful=Number(results[0].status==='fulfilled')+Number(results[1].status==='fulfilled'&&results[1].value.status===200);
     expect(successful).toBe(1);expect((await service.list('room')).length).toBe(1);
   });
-  it('wrong PIN and another person cannot change, cancel or finish a reservation',async()=>{
-    expect((await call('/dashboard/api/bookings',input({pin:'9999'}))).status).toBe(403);
+  it('selecting another user cannot change, cancel or finish the original owner reservation',async()=>{
     const saved=await change('slack-owned');
     for(const action of ['update','cancel','finish','extend'])expect((await call('/dashboard/api/bookings',input({action,user:'U2',reservation_id:saved.reservation_id,version:1,minutes:30}))).status).toBe(409);
     expect((await service.owned(saved.reservation_id,'U1')).status).toBe('active');
   });
-  it('PIN attempts are bounded across requests, and revoked members are rejected',async()=>{
-    for(let i=0;i<5;i++)expect((await call('/dashboard/api/bookings',input({pin:'9999'}))).status).toBe(403);
-    expect((await call('/dashboard/api/bookings',input())).status).toBe(429);
+  it('missing, unregistered and revoked members are rejected even without PIN',async()=>{
+    for(const user of [undefined,'','UMISSING','invalid'])expect((await call('/dashboard/api/bookings',input({user,pin:undefined}))).status).toBe(403);
     await db.prepare("UPDATE dashboard_members SET enabled=0 WHERE slack_user_id='U2'").run();
-    expect((await call('/dashboard/api/bookings',input({user:'U2'}))).status).toBe(403);
+    expect((await call('/dashboard/api/bookings',input({user:'U2',pin:undefined}))).status).toBe(403);
   });
   it('quantity, pool and maintenance conflicts use existing booking validation',async()=>{
     await db.prepare("UPDATE resources SET capacity=8,booking_pools=? WHERE id='stirrer'").bind(JSON.stringify([{id:'inside',name:'内',capacity:3},{id:'outside',name:'外',capacity:5}])).run();

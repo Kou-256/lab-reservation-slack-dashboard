@@ -61,18 +61,10 @@ export async function requireDevice(env:Env,request:Request,now:number) {
   if(!device)throw new DashboardError('この端末は無効化またはキー再発行されています。管理者に連絡してください。',401);
   return device;
 }
-// PINはランダムsaltとサーバー秘密鍵によるHMACで保存。DBだけからの総当たりを防ぐ。
-export async function pinHash(env:Env,user:string,pin:string,salt:string) {
-  configured(env);return sign(env.DASHBOARD_SECRET!,`pin:${user}:${salt}:${pin}`);
-}
-export async function requireMember(env:Env,user:unknown,pin:unknown,now:number) {
-  if(typeof user!=='string'||!/^U[A-Z0-9]+$/.test(user)||typeof pin!=='string'||!/^\d{4}$/.test(pin))throw new DashboardError('氏名と4桁のPINを確認してください。',403);
-  // 検証前に枠を確保して並列総当たりも制限する。成功分だけ減らし、失敗5回で15分停止。
-  await attempt(env.DB,'member:'+user,5,now);
-  const member=await env.DB.prepare(`SELECT m.name,d.pin_salt,d.pin_hash FROM dashboard_members d JOIN member_names m USING(slack_user_id)
-    WHERE d.slack_user_id=? AND d.enabled=1`).bind(user).first<{name:string;pin_salt:string;pin_hash:string}>();
-  const expected=member?.pin_hash??'0'.repeat(64),salt=member?.pin_salt??'missing';
-  if(!member||!await equalSecret(await pinHash(env,user,pin,salt),expected))throw new DashboardError('氏名またはPINが正しくありません。',403);
-  await env.DB.prepare('UPDATE dashboard_auth_attempts SET attempts=MAX(0,attempts-1) WHERE bucket=?').bind('member:'+user).run();
-  return {id:user,name:member.name,credentialHash:member.pin_hash};
+// 共用端末では氏名選択を記録に用いる。本人確認ではなく、登録済み有効メンバーだけを許可する。
+export async function requireMember(env:Env,user:unknown) {
+  if(typeof user!=='string'||!/^U[A-Z0-9]+$/.test(user))throw new DashboardError('利用者を選択してください。',403);
+  const member=await env.DB.prepare(`SELECT m.name FROM dashboard_members d JOIN member_names m USING(slack_user_id) WHERE d.slack_user_id=? AND d.enabled=1`).bind(user).first<{name:string}>();
+  if(!member)throw new DashboardError('利用者が未登録または無効です。',403);
+  return {id:user,name:member.name};
 }
