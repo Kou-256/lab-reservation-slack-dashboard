@@ -275,3 +275,10 @@ body[data-view=calendar] #main{flex:1;min-height:0;display:flex}
 #booking-form textarea{min-height:88px}
 #booking-dialog .dialog-actions{position:sticky;bottom:-1px;background:var(--surface);padding:12px 0;margin:0}
 @media(max-height:500px){#booking-dialog .dialog-heading{position:static}#booking-dialog{margin:8px auto;max-height:calc(var(--input-viewport,100dvh) - 16px)}}
+
+/* 今日と選択日を別々に示し、日付変更後も予定バーの下で識別できるようにする。 */
+.calendar-day.today{background:var(--soft);box-shadow:inset 0 0 0 2px var(--blue)}
+.calendar-day.today>span{font-weight:700;color:var(--blue)}
+.calendar-day.today>span::before{content:"";width:5px;height:5px;border-radius:50%;background:currentColor;flex:none}
+.calendar-title{display:block;font-size:13px;font-weight:500;color:var(--muted);line-height:1.3}
+.calendar-heading h2{line-height:1.2}
