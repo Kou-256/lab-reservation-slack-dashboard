@@ -45,16 +45,12 @@ async function api(path:string,body?:Record<string,unknown>) {
     const response=await fetch('/dashboard/api/'+path,{method:body?'POST':'GET',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined,credentials:'same-origin',cache:'no-store',signal:controller.signal});
     if(!response.headers.get('Content-Type')?.includes('application/json'))throw new Error('サーバーから正しい応答を取得できませんでした。');
     const result=await response.json();
-    if(response.status===401){showUnlock();throw new Error(result.error??'端末の認証が必要です。');}
+    if(response.status===401){showUnlock();throw new Error(result.error??'秘密URLからアクセスしてください。');}
     if(!response.ok)throw new Error(result.error??'通信に失敗しました。');
     return result;
   } finally {clearTimeout(timeout);}
 }
-function showUnlock(){calendarState=null;calendarRequest++;calendarLoading=false;calendarSignature='';document.body.dataset.ganttExpanded='false';data=null;lastSignature='';$('workspace').hidden=true;$('lock').hidden=true;$('unlock').hidden=false;$('main').replaceChildren();for(const id of ['booking-dialog','history-dialog','gantt-dialog','order-dialog'])if($<HTMLDialogElement>(id).open)$<HTMLDialogElement>(id).close();if(pollTimer)clearTimeout(pollTimer);}
-$<HTMLFormElement>('unlock-form').onsubmit=async event=>{
-  event.preventDefault();const form=event.currentTarget as HTMLFormElement,button=form.querySelector('button')!;button.disabled=true;$('unlock-error').textContent='';
-  try{await api('unlock',{key:(new FormData(form).get('key')??'').toString()});form.reset();await refresh();}catch(error){$('unlock-error').textContent=message(error);}finally{button.disabled=false;}
-};
+function showUnlock(){$('unlock-error').textContent='';calendarState=null;calendarRequest++;calendarLoading=false;calendarSignature='';document.body.dataset.ganttExpanded='false';data=null;lastSignature='';$('workspace').hidden=true;$('lock').hidden=true;$('unlock').hidden=false;$('main').replaceChildren();for(const id of ['booking-dialog','history-dialog','gantt-dialog','order-dialog'])if($<HTMLDialogElement>(id).open)$<HTMLDialogElement>(id).close();if(pollTimer)clearTimeout(pollTimer);}
 $('lock').onclick=async()=>{try{await api('lock',{});showUnlock();}catch(error){toast(message(error));}};
 function message(error:unknown){return error instanceof Error?error.message:'処理に失敗しました。';}
 async function refresh(){
@@ -233,13 +229,13 @@ setInterval(()=>{if((selected||displayMode==='gantt')&&data&&fresh())render();},
 
 const qrDialog=$<HTMLDialogElement>('qr-dialog');let qrAbort:AbortController|null=null;
 function qrKey(text:string):string {
-  if(/^[A-Za-z0-9_-]{32,200}$/.test(text))return text;
-  try{const url=new URL(text);if(url.origin!==location.origin||!['/dashboard','/dashboard/'].includes(url.pathname))throw 0;const key=new URLSearchParams(url.hash.slice(1)).get('device');if(key&&/^[A-Za-z0-9_-]{32,200}$/.test(key))return key;}catch{}
-  throw new Error('このダッシュボード用の端末QRではありません。');
+  try{const url=new URL(text);if(url.origin!==location.origin||!['/dashboard','/dashboard/'].includes(url.pathname))throw 0;const params=new URLSearchParams(url.hash.slice(1)),key=params.get('access')??params.get('device');if(key&&/^[A-Za-z0-9_-]{32,200}$/.test(key))return key;}catch{}
+  throw new Error('このダッシュボード用の秘密URLではありません。');
 }
 async function connectQR(text:string){
   let key:string;try{key=qrKey(text);}catch(error){$('qr-message').textContent=message(error);return;}
-  qrAbort?.abort();qrDialog.close();$('unlock-error').textContent='';
+  const link=new URL(text);if(new URLSearchParams(link.hash.slice(1)).has('access'))history.replaceState(null,'',link);
+  qrAbort?.abort();qrDialog.close();$('unlock-error').textContent='接続しています…';
   try{await api('unlock',{key});await refresh();}catch(error){$('unlock-error').textContent=message(error);}
 }
 $('scan-qr').onclick=async()=>{
@@ -254,8 +250,16 @@ $<HTMLInputElement>('qr-file').onchange=async event=>{
   try{const text=await(await import('./qr-scan.js')).readQRImage(file);if(!qrDialog.open)return;if(!text)throw new Error('QRを読み取れませんでした。鮮明な画像でお試しください。');await connectQR(text);}catch(error){$('qr-message').textContent=message(error);}
 };
 // QRの秘密値はURLフラグメントだけに入れる。サーバーへ送らず、読み込み直後に履歴から除く。
-let initialQR=location.hash.startsWith('#device=')?location.href:'';
-if(initialQR){const url=new URL(location.href);url.hash='';history.replaceState(null,'',url);const value=initialQR;initialQR='';void connectQR(value);}else void refresh();
+// 秘密部分はフラグメントに置き、HTTP URL・Refererへ送らない。秘密URLはそのままブックマーク可能。
+let openingSecretURL=false;
+async function openSecretURL(){
+  const params=new URLSearchParams(location.hash.slice(1));if(openingSecretURL||(!params.has('access')&&!params.has('device')))return;
+  openingSecretURL=true;const value=location.href;
+  if(!params.has('access')){const url=new URL(location.href);url.hash='';history.replaceState(null,'',url);}
+  try{await connectQR(value);}finally{openingSecretURL=false;}
+}
+window.addEventListener('hashchange',()=>void openSecretURL());
+if(new URLSearchParams(location.hash.slice(1)).has('access')||new URLSearchParams(location.hash.slice(1)).has('device'))void openSecretURL();else void refresh();
 
 
 

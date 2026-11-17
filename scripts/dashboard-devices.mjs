@@ -9,4 +9,4 @@ if(!['list','create','rename','disable','enable','rotate'].includes(action))thro
 const response=await fetch(url,{method:body?'POST':'GET',headers:{Authorization:`Bearer ${process.env.ADMIN_TOKEN}`,Origin:url.origin,...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined});
 const result=await response.json();if(!response.ok)throw new Error(result.error??'端末管理に失敗しました。');
 if(result.devices)console.table(result.devices.map(d=>({ID:d.id,端末名:d.name,状態:d.enabled?'有効':'無効'})));
-else {console.log(`完了: ${result.id}`);if(result.key){const files=await writeDeviceQR(result,process.env.WORKER_URL);console.log(`接続用QR: ${files.png}`);}}
+else {console.log(`完了: ${result.id}`);if(result.key){const files=await writeDeviceQR(result,process.env.WORKER_URL);console.log(`秘密URLのショートカット: ${files.shortcut}\n接続用QR: ${files.png}`);}}

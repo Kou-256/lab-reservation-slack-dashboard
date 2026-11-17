@@ -14,12 +14,11 @@
 <body>
   <header class="app-header">
     <div><h1><button id="home" class="brand-home" data-command="overview" aria-label="研究室 設備予約：設備一覧に戻る">研究室 設備予約</button></h1><p>予約状況を確認・タブレットから予約</p></div>
-    <div class="header-right"><time id="clock">日時を確認しています</time><div class="header-actions"><button id="theme" class="header-button">ダーク表示</button><button id="fullscreen" class="header-button">全画面</button><button id="lock" class="header-button" hidden>端末ロック</button></div></div>
+    <div class="header-right"><time id="clock">日時を確認しています</time><div class="header-actions"><button id="theme" class="header-button">ダーク表示</button><button id="fullscreen" class="header-button">全画面</button><button id="lock" class="header-button" hidden>接続を解除</button></div></div>
   </header>
   <section id="unlock" class="unlock-panel" aria-labelledby="unlock-title">
-    <h2 id="unlock-title">共用タブレットを接続</h2><p>管理者から受け取った端末キーを入力してください。<br>接続後、予約する人の氏名を選択します。</p>
-    <form id="unlock-form"><label>端末キー<input name="key" type="password" required autocomplete="off" maxlength="200"></label><button class="primary" type="submit">接続する</button></form>
-    <button id="scan-qr" type="button">端末キーのQRコードを読む</button>
+    <h2 id="unlock-title">秘密URLからアクセスしてください</h2><p>配布された秘密URLを開くと、そのまま設備予約を利用できます。<br>キーやPINの入力は不要です。</p>
+    <button id="scan-qr" type="button">秘密URLのQRコードを読む</button>
     <p id="unlock-error" role="alert"></p>
   </section>
   <div id="workspace" hidden>
@@ -53,9 +52,9 @@
     <form id="history-form" class="history-controls"><label>終了日の開始<input name="from" type="date" required></label><label>終了日の最終<input name="to" type="date" required></label><button type="submit">表示する</button></form>
     <p id="history-message" role="status"></p><div id="history-list"></div><button id="history-more" type="button" hidden>さらに30件を表示</button>
   </dialog>
-<dialog id="qr-dialog" aria-labelledby="qr-title"><div class="dialog-heading"><h2 id="qr-title">端末キーのQRコード</h2><button id="qr-close" type="button">閉じる</button></div>
+<dialog id="qr-dialog" aria-labelledby="qr-title"><div class="dialog-heading"><h2 id="qr-title">秘密URLのQRコード</h2><button id="qr-close" type="button">閉じる</button></div>
     <p class="muted">このタブレット用のQRをカメラに向けてください。画像は端末内で読み取り、送信しません。</p>
     <video id="qr-video" autoplay muted playsinline></video><p id="qr-message" role="status">カメラを起動しています…</p>
-    <label>QRの画像ファイルから読み取る<input id="qr-file" type="file" accept="image/*"></label>
+    <label>秘密URLのQR画像を選ぶ<input id="qr-file" type="file" accept="image/*"></label>
   </dialog>
 </body></html>

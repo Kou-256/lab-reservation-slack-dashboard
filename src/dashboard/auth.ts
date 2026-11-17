@@ -44,7 +44,7 @@ export async function deviceCookie(env:Env,request:Request,provided:string,now:n
   const ip=await sign(env.DASHBOARD_SECRET!,'ip:'+ (request.headers.get('CF-Connecting-IP')??'local'));
   await attempt(env.DB,'device:'+ip,10,now);
   const device=await env.DB.prepare('SELECT id,version FROM dashboard_devices WHERE key_hash=? AND enabled=1').bind(await sign(env.DASHBOARD_SECRET!,'device-key:'+provided)).first<{id:string;version:number}>();
-  if(!device)throw new DashboardError('端末キーが正しくないか、この端末は無効化されています。',401);
+  if(!device)throw new DashboardError('秘密URLが無効です。管理者から最新のURLを受け取ってください。',401);
   const expiry=now+30*DAY;
   const payload=`${device.id}.${device.version}.${expiry}`;
   const value=payload+'.'+await sign(env.DASHBOARD_SECRET!,'device:'+payload);
@@ -55,10 +55,10 @@ export async function requireDevice(env:Env,request:Request,now:number) {
   configured(env);
   const cookie=request.headers.get('Cookie')?.split(';').map(v=>v.trim()).find(v=>v.startsWith('lab_dashboard='))?.slice(14)??'';
   const [id,version,expiry,signature,...extra]=cookie.split('.'),ms=Number(expiry);
-  if(extra.length||!id||!Number.isSafeInteger(Number(version))||!Number.isSafeInteger(ms)||ms<=now||ms>now+31*DAY||!await verify(env.DASHBOARD_SECRET!,'device:'+`${id}.${version}.${expiry}`,signature??''))throw new DashboardError('端末の認証が必要です。',401);
+  if(extra.length||!id||!Number.isSafeInteger(Number(version))||!Number.isSafeInteger(ms)||ms<=now||ms>now+31*DAY||!await verify(env.DASHBOARD_SECRET!,'device:'+`${id}.${version}.${expiry}`,signature??''))throw new DashboardError('秘密URLからアクセスしてください。',401);
   // 端末を無効化・キー再発行した場合は、有効期限前のCookieも直ちに拒否する。
   const device=await env.DB.prepare('SELECT id,name FROM dashboard_devices WHERE id=? AND version=? AND enabled=1').bind(id,Number(version)).first<{id:string;name:string}>();
-  if(!device)throw new DashboardError('この端末は無効化またはキー再発行されています。管理者に連絡してください。',401);
+  if(!device)throw new DashboardError('この接続は停止または再発行されています。最新の秘密URLを開いてください。',401);
   return device;
 }
 // 共用端末では氏名選択を記録に用いる。本人確認ではなく、登録済み有効メンバーだけを許可する。
