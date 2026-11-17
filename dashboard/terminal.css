@@ -282,3 +282,6 @@ body[data-view=calendar] #main{flex:1;min-height:0;display:flex}
 .calendar-day.today>span::before{content:"";width:5px;height:5px;border-radius:50%;background:currentColor;flex:none}
 .calendar-title{display:block;font-size:13px;font-weight:500;color:var(--muted);line-height:1.3}
 .calendar-heading h2{line-height:1.2}
+
+/* スマホでも共通URLから利用するため、月操作の最小幅を端末幅以内に収める。 */
+@media(max-width:750px){.calendar-heading{min-width:0}.calendar-navigation{flex:0 1 100%;width:100%;max-width:100%;min-width:0;flex-wrap:wrap}.calendar-settings>div{max-width:calc(100vw - 32px)}}

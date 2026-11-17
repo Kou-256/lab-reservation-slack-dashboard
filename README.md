@@ -37,7 +37,7 @@ npm run deploy
 
 Slack Appはslack-http-manifest.yamlを参考に作成し、URLを自分のWorkerの/slack/eventsへ変更します。Signing Secretによる署名検証が必要です。DBのresourcesに自分の設備設定を登録し、member_namesに利用者を登録します。config内はテスト用の架空フィクスチャで、本番に投入しないでください。予約初期データの投入は自動化していません。
 
-タブレット画面は/dashboard/です。端末登録はscripts/dashboard-devices.mjs、利用者の有効・無効はscripts/dashboard-member.mjsを使用します。.env.exampleの値は自分の環境で設定します。個人PINは廃止し、登録済みの氏名を選択して操作します。他人の名前でも操作できるため、管理された共用端末向けです。秘密URL・QRはアクセス権限そのものなので公開しないでください。
+タブレット画面は/dashboard/です。共通URLの発行はscripts/dashboard-shared-url.mjs、利用者の有効・無効はscripts/dashboard-member.mjsを使用します。.env.exampleの値は自分の環境で設定します。個人PINは廃止し、登録済みの氏名を選択して操作します。他人の名前でも操作できるため、研究室内でURLを共有する運用です。秘密URL・QRはアクセス権限そのものなので公開しないでください。
 
 ## 公開範囲
 
@@ -49,6 +49,6 @@ Slack Appはslack-http-manifest.yamlを参考に作成し、URLを自分のWorke
 
 [MIT License](LICENSE)。著作権表示とライセンス文を保持すれば、商用利用・改変・再配布が可能です。無保証で提供します。依存パッケージには、それぞれのライセンスが適用されます。同梱するNoto Sans JPフォントはSIL Open Font License 1.1です。[第三者ライセンス](THIRD_PARTY_NOTICES.md)も参照してください。
 
-## 秘密URLで開く
+## 全員が使う共通URL
 
-端末ごとの秘密URLを開くだけで利用できます。キーやPINの手入力はありません。`scripts/dashboard-devices.mjs create 名前`で発行し、`backups/dashboard-device-qr/`内の`.url`ショートカット、QR、`.secrets.json`から配布します。これらはGit対象外です。秘密部分は`#access=…`に置き、HTTPのURL・Refererへ送らず、ローカルストレージにも保存しません。URLはブックマークできます。`disable`で停止、`rotate`で再発行でき、古いURLと接続済みCookieを無効にできます。秘密URLを持つ人は氏名選択で閲覧・予約できます。通常の`/dashboard/`だけでは予約情報は取得できません。
+スマートフォン・タブレット・PCで同じ秘密URLを使用できます。端末別の配布や利用台数の登録は不要です。`node --env-file=.env scripts/dashboard-shared-url.mjs`で共通URLを1つ発行し、`backups/dashboard-shared-link/研究室共通URL.html`から配布してください。再実行しても同じURLを使います。`--rotate`を付けると共通URLを再発行し、旧URLとその接続を無効化します。秘密を含む生成物はGit対象外です。同じ研究室内ネットワークから多数の端末が開いても、正常な接続を失敗回数として数えません。

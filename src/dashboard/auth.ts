@@ -41,10 +41,13 @@ export async function attempt(db:D1Database,bucket:string,limit:number,now:numbe
 }
 export async function deviceCookie(env:Env,request:Request,provided:string,now:number) {
   configured(env);
-  const ip=await sign(env.DASHBOARD_SECRET!,'ip:'+ (request.headers.get('CF-Connecting-IP')??'local'));
-  await attempt(env.DB,'device:'+ip,10,now);
   const device=await env.DB.prepare('SELECT id,version FROM dashboard_devices WHERE key_hash=? AND enabled=1').bind(await sign(env.DASHBOARD_SECRET!,'device-key:'+provided)).first<{id:string;version:number}>();
-  if(!device)throw new DashboardError('秘密URLが無効です。管理者から最新のURLを受け取ってください。',401);
+  if(!device){
+    // 共通URLをスマホ・PCから同時利用しても、成功した接続はIP単位の失敗回数に加算しない。
+    const ip=await sign(env.DASHBOARD_SECRET!,'ip:'+(request.headers.get('CF-Connecting-IP')??'local'));
+    await attempt(env.DB,'device:'+ip,10,now);
+    throw new DashboardError('秘密URLが無効です。管理者から最新のURLを受け取ってください。',401);
+  }
   const expiry=now+30*DAY;
   const payload=`${device.id}.${device.version}.${expiry}`;
   const value=payload+'.'+await sign(env.DASHBOARD_SECRET!,'device:'+payload);

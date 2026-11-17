@@ -115,6 +115,15 @@ describe('tablet dashboard API and shared reservation compatibility',()=>{
     env.DASHBOARD_SECRET=undefined;expect((await call('/dashboard/api/snapshot')).status).toBe(503);
     expect(await db.prepare('SELECT count(*) AS n FROM reservations').first('n')).toBe(0);
   });
+  it('one shared URL accepts more than ten successful clients on the same network',async()=>{
+    for(let i=0;i<15;i++)expect((await call('/dashboard/api/unlock',{key:env.DASHBOARD_DEVICE_KEY})).status).toBe(200);
+    expect((await db.prepare("SELECT * FROM dashboard_auth_attempts WHERE bucket LIKE 'device:%'").all()).results).toEqual([]);
+  });
+  it('invalid URL attempts are limited without locking out a valid shared URL',async()=>{
+    for(let i=0;i<10;i++)expect((await call('/dashboard/api/unlock',{key:'invalid-url-token'})).status).toBe(401);
+    expect((await call('/dashboard/api/unlock',{key:'invalid-url-token'})).status).toBe(429);
+    expect((await call('/dashboard/api/unlock',{key:env.DASHBOARD_DEVICE_KEY})).status).toBe(200);
+  });
   it('does not expose user IDs, PIN hashes, channel IDs, receipts or cancelled reservations in snapshots',async()=>{
     await change('slack-create');await service.change('slack-cancel','cancelled','room','U1','',undefined,(await service.list('room'))[0].id,1);
     const response=await call('/dashboard/api/snapshot'),body=await response.json() as any;
